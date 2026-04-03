@@ -34,6 +34,8 @@ export class GroupQueue {
   private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
     null;
   private shuttingDown = false;
+  private folderLookup: ((jid: string) => string | undefined) | null = null;
+  private activeFolders = new Set<string>();
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);
@@ -59,6 +61,14 @@ export class GroupQueue {
     this.processMessagesFn = fn;
   }
 
+  setFolderLookup(fn: (jid: string) => string | undefined): void {
+    this.folderLookup = fn;
+  }
+
+  private getFolder(groupJid: string): string | undefined {
+    return this.folderLookup?.(groupJid);
+  }
+
   enqueueMessageCheck(groupJid: string): void {
     if (this.shuttingDown) return;
 
@@ -67,6 +77,17 @@ export class GroupQueue {
     if (state.active) {
       state.pendingMessages = true;
       logger.debug({ groupJid }, 'Container active, message queued');
+      return;
+    }
+
+    // Folder-level serialization: if another JID for the same folder is active, queue
+    const folder = this.getFolder(groupJid);
+    if (folder && this.activeFolders.has(folder)) {
+      state.pendingMessages = true;
+      if (!this.waitingGroups.includes(groupJid)) {
+        this.waitingGroups.push(groupJid);
+      }
+      logger.debug({ groupJid, folder }, 'Folder busy, message queued');
       return;
     }
 
@@ -108,6 +129,17 @@ export class GroupQueue {
         this.closeStdin(groupJid);
       }
       logger.debug({ groupJid, taskId }, 'Container active, task queued');
+      return;
+    }
+
+    // Folder-level serialization: if another JID for the same folder is active, queue
+    const folder = this.getFolder(groupJid);
+    if (folder && this.activeFolders.has(folder)) {
+      state.pendingTasks.push({ id: taskId, groupJid, fn });
+      if (!this.waitingGroups.includes(groupJid)) {
+        this.waitingGroups.push(groupJid);
+      }
+      logger.debug({ groupJid, taskId, folder }, 'Folder busy, task queued');
       return;
     }
 
@@ -198,11 +230,13 @@ export class GroupQueue {
     reason: 'messages' | 'drain',
   ): Promise<void> {
     const state = this.getGroup(groupJid);
+    const folder = this.getFolder(groupJid);
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = false;
     state.pendingMessages = false;
     this.activeCount++;
+    if (folder) this.activeFolders.add(folder);
 
     logger.debug(
       { groupJid, reason, activeCount: this.activeCount },
@@ -227,17 +261,20 @@ export class GroupQueue {
       state.containerName = null;
       state.groupFolder = null;
       this.activeCount--;
+      if (folder) this.activeFolders.delete(folder);
       this.drainGroup(groupJid);
     }
   }
 
   private async runTask(groupJid: string, task: QueuedTask): Promise<void> {
     const state = this.getGroup(groupJid);
+    const folder = this.getFolder(groupJid);
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = true;
     state.runningTaskId = task.id;
     this.activeCount++;
+    if (folder) this.activeFolders.add(folder);
 
     logger.debug(
       { groupJid, taskId: task.id, activeCount: this.activeCount },
@@ -256,6 +293,7 @@ export class GroupQueue {
       state.containerName = null;
       state.groupFolder = null;
       this.activeCount--;
+      if (folder) this.activeFolders.delete(folder);
       this.drainGroup(groupJid);
     }
   }
@@ -316,12 +354,25 @@ export class GroupQueue {
   }
 
   private drainWaiting(): void {
+    let skippedCount = 0;
     while (
       this.waitingGroups.length > 0 &&
-      this.activeCount < MAX_CONCURRENT_CONTAINERS
+      this.activeCount < MAX_CONCURRENT_CONTAINERS &&
+      skippedCount < this.waitingGroups.length
     ) {
       const nextJid = this.waitingGroups.shift()!;
       const state = this.getGroup(nextJid);
+
+      // Folder-level serialization: skip if this JID's folder is still active
+      const folder = this.getFolder(nextJid);
+      if (folder && this.activeFolders.has(folder)) {
+        // Re-queue at the end so it gets another chance later
+        this.waitingGroups.push(nextJid);
+        skippedCount++;
+        continue;
+      }
+
+      skippedCount = 0; // Reset: we found a runnable group
 
       // Prioritize tasks over messages
       if (state.pendingTasks.length > 0) {

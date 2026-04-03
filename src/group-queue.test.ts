@@ -433,6 +433,39 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
   });
 
+  it('serializes containers for JIDs that share the same folder', async () => {
+    let concurrentCount = 0;
+    let maxConcurrent = 0;
+
+    const processMessages = vi.fn(async (_groupJid: string) => {
+      concurrentCount++;
+      maxConcurrent = Math.max(maxConcurrent, concurrentCount);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      concurrentCount--;
+      return true;
+    });
+
+    queue.setProcessMessagesFn(processMessages);
+
+    // Tell the queue that both JIDs share a folder
+    queue.setFolderLookup((jid: string) => {
+      if (jid === 'tg:123' || jid === 'dc:456') return 'iris';
+      return undefined;
+    });
+
+    // Enqueue messages for two JIDs sharing the same folder
+    queue.enqueueMessageCheck('tg:123');
+    queue.enqueueMessageCheck('dc:456');
+
+    // Let both process
+    await vi.advanceTimersByTimeAsync(300);
+
+    // Should never have run concurrently
+    expect(maxConcurrent).toBe(1);
+    // But both should have run
+    expect(processMessages).toHaveBeenCalledTimes(2);
+  });
+
   it('preempts when idle arrives with pending tasks', async () => {
     const fs = await import('fs');
     let resolveProcess: () => void;

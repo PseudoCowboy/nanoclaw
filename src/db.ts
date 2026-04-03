@@ -76,11 +76,22 @@ function createSchema(database: Database.Database): void {
     CREATE TABLE IF NOT EXISTS registered_groups (
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      folder TEXT NOT NULL UNIQUE,
+      folder TEXT NOT NULL,
       trigger_pattern TEXT NOT NULL,
       added_at TEXT NOT NULL,
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_registered_groups_folder ON registered_groups(folder);
+  `);
+
+  // Add orchestration_state table (for Discord multi-agent state persistence)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS orchestration_state (
+      key TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
@@ -138,6 +149,38 @@ function createSchema(database: Database.Database): void {
     );
   } catch {
     /* columns already exist */
+  }
+
+  // Drop UNIQUE constraint on folder column (allows multi-JID per folder for Unified Iris)
+  // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so we recreate the table.
+  try {
+    // Check if the UNIQUE constraint still exists by inspecting the table SQL
+    const tableInfo = database
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='registered_groups'",
+      )
+      .get() as { sql: string } | undefined;
+
+    if (tableInfo?.sql?.includes('UNIQUE')) {
+      database.exec(`
+        CREATE TABLE registered_groups_new (
+          jid TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          folder TEXT NOT NULL,
+          trigger_pattern TEXT NOT NULL,
+          added_at TEXT NOT NULL,
+          container_config TEXT,
+          requires_trigger INTEGER DEFAULT 1,
+          is_main INTEGER DEFAULT 0
+        );
+        INSERT INTO registered_groups_new SELECT * FROM registered_groups;
+        DROP TABLE registered_groups;
+        ALTER TABLE registered_groups_new RENAME TO registered_groups;
+        CREATE INDEX IF NOT EXISTS idx_registered_groups_folder ON registered_groups(folder);
+      `);
+    }
+  } catch {
+    /* migration already applied or table doesn't need it */
   }
 }
 
@@ -516,6 +559,10 @@ export function setSession(groupFolder: string, sessionId: string): void {
   ).run(groupFolder, sessionId);
 }
 
+export function deleteSession(groupFolder: string): void {
+  db.prepare('DELETE FROM sessions WHERE group_folder = ?').run(groupFolder);
+}
+
 export function getAllSessions(): Record<string, string> {
   const rows = db
     .prepare('SELECT group_folder, session_id FROM sessions')
@@ -622,6 +669,59 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     };
   }
   return result;
+}
+
+// --- Orchestration state accessors (Discord multi-agent persistence) ---
+
+export function getOrchestrationState(
+  key: string,
+): { type: string; data: string; updated_at: string } | undefined {
+  const row = db
+    .prepare(
+      'SELECT type, data, updated_at FROM orchestration_state WHERE key = ?',
+    )
+    .get(key) as { type: string; data: string; updated_at: string } | undefined;
+  return row;
+}
+
+export function setOrchestrationState(
+  key: string,
+  type: string,
+  data: string,
+): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT OR REPLACE INTO orchestration_state (key, type, data, updated_at) VALUES (?, ?, ?, ?)',
+  ).run(key, type, data, now);
+}
+
+export function deleteOrchestrationState(key: string): void {
+  db.prepare('DELETE FROM orchestration_state WHERE key = ?').run(key);
+}
+
+export function getAllOrchestrationState(
+  type?: string,
+): Array<{ key: string; type: string; data: string; updated_at: string }> {
+  if (type) {
+    return db
+      .prepare(
+        'SELECT key, type, data, updated_at FROM orchestration_state WHERE type = ?',
+      )
+      .all(type) as Array<{
+      key: string;
+      type: string;
+      data: string;
+      updated_at: string;
+    }>;
+  }
+  return db
+    .prepare('SELECT key, type, data, updated_at FROM orchestration_state')
+    .all() as Array<{
+    key: string;
+    type: string;
+    data: string;
+    updated_at: string;
+  }>;
 }
 
 // --- JSON migration ---

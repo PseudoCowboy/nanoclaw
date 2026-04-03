@@ -7,11 +7,15 @@ import {
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
-import './channels/index.js';
+import { loadChannels } from './channels/index.js';
 import {
   getChannelFactory,
   getRegisteredChannelNames,
 } from './channels/registry.js';
+import {
+  getBranchForChannel,
+  getProjectSlugForChannel,
+} from './channels/discord-commands/index.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -23,6 +27,7 @@ import {
   ensureContainerRuntimeRunning,
 } from './container-runtime.js';
 import {
+  deleteSession,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
@@ -107,6 +112,105 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
     { jid, name: group.name, folder: group.folder },
     'Group registered',
   );
+  writeChannelJidsMap();
+
+  // Async validation: verify JID is a real channel (not a bot/application ID).
+  // Logs a warning if validation fails so the mistake is caught early.
+  const channel = findChannel(channels, jid);
+  if (channel?.validateJid) {
+    channel
+      .validateJid(jid)
+      .then((valid) => {
+        if (!valid) {
+          logger.error(
+            { jid, folder: group.folder, name: group.name },
+            'INVALID JID: This does not appear to be a real channel ID. ' +
+              'For Discord, use the channel ID (right-click channel → Copy Channel ID), ' +
+              'NOT the Application ID or Bot User ID. Messages to this group will be silently dropped.',
+          );
+        }
+      })
+      .catch(() => {
+        // Validation failure is non-fatal, just log
+      });
+  }
+}
+
+/**
+ * Write channel-jids.json for groups that span multiple JIDs.
+ * Container agents read this to discover cross-channel destinations.
+ * Format: { "discord": { "channel-name": "dc:123" }, "telegram": { "chat-name": "tg:456" } }
+ */
+function writeChannelJidsMap(): void {
+  // Group JIDs by folder
+  const folderToJids = new Map<string, Array<{ jid: string; name: string }>>();
+  // Also track which folders are main (so they get ALL JIDs)
+  const mainFolders = new Set<string>();
+  for (const [jid, group] of Object.entries(registeredGroups)) {
+    const existing = folderToJids.get(group.folder) || [];
+    existing.push({ jid, name: group.name });
+    folderToJids.set(group.folder, existing);
+    if (group.isMain) mainFolders.add(group.folder);
+  }
+
+  // Collect all JIDs for main folders (so Iris can see all channels)
+  const allJids: Array<{ jid: string; name: string }> = [];
+  for (const entries of folderToJids.values()) {
+    allJids.push(...entries);
+  }
+
+  // Write for all folders (even single JID — agent still needs to know its channels)
+  for (const [folder, entries] of folderToJids) {
+    // Main folders get ALL registered JIDs so they can orchestrate across channels
+    const jidsToWrite = mainFolders.has(folder) ? allJids : entries;
+    const channelMap: Record<string, Record<string, string>> = {};
+    for (const { jid, name } of jidsToWrite) {
+      const prefix = jid.split(':')[0]; // 'tg', 'dc', etc.
+      const platform =
+        prefix === 'tg' ? 'telegram' : prefix === 'dc' ? 'discord' : prefix;
+      if (!channelMap[platform]) channelMap[platform] = {};
+      channelMap[platform][name] = jid;
+    }
+
+    try {
+      const groupDir = resolveGroupFolderPath(folder);
+      const filePath = path.join(groupDir, 'channel-jids.json');
+      fs.writeFileSync(filePath, JSON.stringify(channelMap, null, 2) + '\n');
+      logger.debug(
+        { folder, channels: Object.keys(channelMap) },
+        'Channel JIDs map written',
+      );
+    } catch (err) {
+      logger.warn({ folder, err }, 'Failed to write channel-jids.json');
+    }
+  }
+
+  // Also write Discord channel map to standalone agent folders (dc_*).
+  // These agents aren't in registered_groups but need channel JIDs for cross-channel messaging.
+  const discordJids: Record<string, string> = {};
+  for (const { jid, name } of allJids) {
+    if (jid.startsWith('dc:')) discordJids[name] = jid;
+  }
+  if (Object.keys(discordJids).length > 0) {
+    const agentChannelMap = { discord: discordJids };
+    const groupsDir = path.resolve(process.cwd(), 'groups');
+    try {
+      for (const dir of fs.readdirSync(groupsDir)) {
+        if (!dir.startsWith('dc_')) continue;
+        if (folderToJids.has(dir)) continue; // Already written above
+        const agentDir = path.join(groupsDir, dir);
+        if (!fs.statSync(agentDir).isDirectory()) continue;
+        const filePath = path.join(agentDir, 'channel-jids.json');
+        fs.writeFileSync(
+          filePath,
+          JSON.stringify(agentChannelMap, null, 2) + '\n',
+        );
+        logger.debug({ folder: dir }, 'Agent channel JIDs map written');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to write agent channel-jids.json');
+    }
+  }
 }
 
 /**
@@ -202,32 +306,52 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
 
-  const output = await runAgent(group, prompt, chatJid, async (result) => {
-    // Streaming output callback — called for each agent result
-    if (result.result) {
-      const raw =
-        typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+  // Look up project/branch context from in-memory maps (not from messages,
+  // since these fields are not persisted through SQLite).
+  const channelId = chatJid.startsWith('dc:') ? chatJid.slice(3) : undefined;
+  const projectSlug = channelId
+    ? (getProjectSlugForChannel(channelId) ?? undefined)
+    : missedMessages.find((m) => m.projectSlug)?.projectSlug;
+  const branchName = channelId
+    ? (getBranchForChannel(channelId) ?? undefined)
+    : missedMessages.find((m) => m.branchName)?.branchName;
+
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    projectSlug,
+    branchName,
+    async (result) => {
+      // Streaming output callback — called for each agent result
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info(
+          { group: group.name },
+          `Agent output: ${raw.slice(0, 200)}`,
+        );
+        if (text) {
+          await channel.sendMessage(chatJid, text);
+          outputSentToUser = true;
+        }
+        // Only reset idle timer on actual results, not session-update markers (result: null)
+        resetIdleTimer();
       }
-      // Only reset idle timer on actual results, not session-update markers (result: null)
-      resetIdleTimer();
-    }
 
-    if (result.status === 'success') {
-      queue.notifyIdle(chatJid);
-    }
+      if (result.status === 'success') {
+        queue.notifyIdle(chatJid);
+      }
 
-    if (result.status === 'error') {
-      hadError = true;
-    }
-  });
+      if (result.status === 'error') {
+        hadError = true;
+      }
+    },
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -259,6 +383,8 @@ async function runAgent(
   group: RegisteredGroup,
   prompt: string,
   chatJid: string,
+  projectSlug: string | undefined,
+  branchName: string | undefined,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
@@ -310,6 +436,8 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
+        projectSlug: projectSlug || undefined,
+        branchName: branchName || undefined,
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -466,6 +594,9 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
 
+  queue.setFolderLookup((jid: string) => registeredGroups[jid]?.folder);
+  writeChannelJidsMap();
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
@@ -505,10 +636,42 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    clearSession: (chatJid: string): boolean => {
+      const group = registeredGroups[chatJid];
+      if (!group) return false;
+      const hadSession = !!sessions[group.folder];
+      // Delete session from DB and in-memory state
+      delete sessions[group.folder];
+      deleteSession(group.folder);
+      // Close any active container so it doesn't keep the old session alive
+      queue.closeStdin(chatJid);
+      logger.info(
+        { chatJid, group: group.name },
+        'Session cleared via /clear command',
+      );
+      return hadSession;
+    },
+    registerGroup: (
+      jid: string,
+      name: string,
+      folder: string,
+      trigger: string,
+    ) => {
+      registerGroup(jid, {
+        name,
+        folder,
+        trigger,
+        added_at: new Date().toISOString(),
+        requiresTrigger: true,
+      });
+    },
   };
 
+  // Load channel modules dynamically (try/catch so missing deps don't crash).
+  await loadChannels();
+
   // Create and connect all registered channels.
-  // Each channel self-registers via the barrel import above.
+  // Each channel self-registers via loadChannels() above.
   // Factories return null when credentials are missing, so unconfigured channels are skipped.
   for (const channelName of getRegisteredChannelNames()) {
     const factory = getChannelFactory(channelName)!;
@@ -526,6 +689,26 @@ async function main(): Promise<void> {
   if (channels.length === 0) {
     logger.fatal('No channels connected');
     process.exit(1);
+  }
+
+  // Validate existing registered group JIDs against connected channels.
+  // Catches bad JIDs (e.g. bot user ID instead of channel ID) on startup.
+  for (const [jid, group] of Object.entries(registeredGroups)) {
+    const ch = findChannel(channels, jid);
+    if (ch?.validateJid) {
+      ch.validateJid(jid)
+        .then((valid) => {
+          if (!valid) {
+            logger.error(
+              { jid, folder: group.folder, name: group.name },
+              'INVALID JID: This does not appear to be a real channel ID. ' +
+                'For Discord, use the channel ID (right-click channel → Copy Channel ID), ' +
+                'NOT the Application ID or Bot User ID. Messages to this group will be silently dropped.',
+            );
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   // Start subsystems (independently of connection handler)
@@ -550,6 +733,24 @@ async function main(): Promise<void> {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
+    },
+    sendDocument: async (jid, filePath, caption) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      if (channel.sendDocument) {
+        await channel.sendDocument(jid, filePath, caption);
+      } else {
+        // Fallback: send a text message with the filename
+        const filename = filePath.split('/').pop() || 'file';
+        await channel.sendMessage(
+          jid,
+          `📎 [File: ${filename}]${caption ? ` — ${caption}` : ''}`,
+        );
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support sendDocument, sent text fallback',
+        );
+      }
     },
     registeredGroups: () => registeredGroups,
     registerGroup,

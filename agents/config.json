@@ -1,0 +1,70 @@
+{
+  "sharedProjectDir": "groups/shared_project",
+  "agents": [
+    {
+      "name": "Athena",
+      "folder": "dc_athena",
+      "role": "Plan Designer",
+      "preferredTool": "codex",
+      "tokenEnvVar": "ATHENA_DISCORD_TOKEN",
+      "channelNames": ["control-room", "plan-room", "plan-*", "discuss-*"],
+      "triggerNames": ["athena"],
+      "listenToBots": true,
+      "emoji": "🟣",
+      "color": 10181558,
+      "containerConfig": { "timeout": 180000 }
+    },
+    {
+      "name": "Hermes",
+      "folder": "dc_hermes",
+      "role": "Planning Collaborator",
+      "preferredTool": "claude",
+      "tokenEnvVar": "HERMES_DISCORD_TOKEN",
+      "channelNames": ["plan-room", "plan-*", "discuss-*", "control-room"],
+      "triggerNames": ["hermes"],
+      "listenToBots": true,
+      "emoji": "🟢",
+      "color": 3066993,
+      "containerConfig": { "timeout": 180000 }
+    },
+    {
+      "name": "Atlas",
+      "folder": "dc_atlas",
+      "role": "Backend Engineer",
+      "preferredTool": "claude",
+      "tokenEnvVar": "ATLAS_DISCORD_TOKEN",
+      "channelNames": ["backend-dev", "ws-*"],
+      "triggerNames": ["atlas"],
+      "listenToBots": "iris-only",
+      "emoji": "🔴",
+      "color": 15158332,
+      "containerConfig": { "timeout": 180000 }
+    },
+    {
+      "name": "Apollo",
+      "folder": "dc_apollo",
+      "role": "Frontend Engineer",
+      "preferredTool": "gemini",
+      "tokenEnvVar": "APOLLO_DISCORD_TOKEN",
+      "channelNames": ["frontend-ui", "ws-*"],
+      "triggerNames": ["apollo"],
+      "listenToBots": "iris-only",
+      "emoji": "🔵",
+      "color": 3447003,
+      "containerConfig": { "timeout": 180000 }
+    },
+    {
+      "name": "Argus",
+      "folder": "dc_argus",
+      "role": "Monitor",
+      "preferredTool": "claude",
+      "tokenEnvVar": "ARGUS_DISCORD_TOKEN",
+      "channelNames": ["qa-alerts", "control-room", "backend-dev", "frontend-ui", "ws-*"],
+      "triggerNames": ["argus"],
+      "listenToBots": "iris-only",
+      "emoji": "🟠",
+      "color": 15957012,
+      "containerConfig": { "timeout": 180000 }
+    }
+  ]
+}

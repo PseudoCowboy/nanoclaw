@@ -424,3 +424,51 @@ describe('registered group isMain', () => {
     expect(group.isMain).toBeUndefined();
   });
 });
+
+// --- Multi-JID per folder (Unified Iris) ---
+
+describe('multi-JID per folder', () => {
+  it('allows two JIDs to share the same folder', () => {
+    setRegisteredGroup('tg:123', {
+      name: 'Iris',
+      folder: 'iris',
+      trigger: '@Iris',
+      added_at: '2024-01-01T00:00:00.000Z',
+      isMain: true,
+    });
+
+    setRegisteredGroup('dc:456', {
+      name: 'Iris',
+      folder: 'iris',
+      trigger: '@Iris',
+      added_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    const groups = getAllRegisteredGroups();
+    expect(groups['tg:123']).toBeDefined();
+    expect(groups['dc:456']).toBeDefined();
+    expect(groups['tg:123'].folder).toBe('iris');
+    expect(groups['dc:456'].folder).toBe('iris');
+    expect(groups['tg:123'].isMain).toBe(true);
+    expect(groups['dc:456'].isMain).toBeUndefined();
+  });
+
+  it('does not affect unrelated groups with unique folders', () => {
+    setRegisteredGroup('tg:111', {
+      name: 'GroupA',
+      folder: 'group_a',
+      trigger: '@Andy',
+      added_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    setRegisteredGroup('tg:222', {
+      name: 'GroupB',
+      folder: 'group_b',
+      trigger: '@Andy',
+      added_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    const groups = getAllRegisteredGroups();
+    expect(Object.keys(groups)).toHaveLength(2);
+  });
+});
