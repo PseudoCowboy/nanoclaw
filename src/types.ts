@@ -53,6 +53,10 @@ export interface NewMessage {
   is_bot_message?: boolean;
   projectSlug?: string; // Project context for workspace/memory isolation
   branchName?: string; // Git branch for agent isolation in workstream channels
+  thread_id?: string;
+  reply_to_message_id?: string;
+  reply_to_message_content?: string;
+  reply_to_sender_name?: string;
 }
 
 export interface ScheduledTask {
@@ -60,6 +64,7 @@ export interface ScheduledTask {
   group_folder: string;
   chat_jid: string;
   prompt: string;
+  script?: string | null;
   schedule_type: 'cron' | 'interval' | 'once';
   schedule_value: string;
   context_mode: 'group' | 'isolated';
