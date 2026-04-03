@@ -28,6 +28,7 @@ import {
 import { OneCLI } from '@onecli-sh/sdk';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
+import { createWorktree, removeWorktree } from './worktree.js';
 
 const onecli = new OneCLI({ url: ONECLI_URL });
 
@@ -66,7 +67,8 @@ function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
   projectSlug?: string,
-): VolumeMount[] {
+  branchName?: string,
+): { mounts: VolumeMount[]; worktreeDir?: string; projectDir?: string } {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
@@ -158,6 +160,26 @@ function buildVolumeMounts(
 
   // Shared project directory — if projectSlug is set, scope to just that project for isolation.
   const sharedDir = path.join(GROUPS_DIR, 'shared_project');
+
+  // Worktree isolation: if both projectSlug and branchName are set, create a
+  // per-agent git worktree so each agent works on an isolated checkout.
+  if (projectSlug && branchName) {
+    const projectDir = path.join(sharedDir, 'active', projectSlug);
+    if (
+      fs.existsSync(projectDir) &&
+      fs.existsSync(path.join(projectDir, '.git'))
+    ) {
+      const agentId = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
+      const worktreeDir = createWorktree(projectDir, branchName, agentId);
+      mounts.push({
+        hostPath: worktreeDir,
+        containerPath: '/workspace/shared',
+        readonly: false,
+      });
+      return { mounts, worktreeDir, projectDir };
+    }
+  }
+
   if (projectSlug) {
     const projectDir = path.join(sharedDir, 'active', projectSlug);
     if (fs.existsSync(projectDir)) {
@@ -307,7 +329,7 @@ function buildVolumeMounts(
     mounts.push(...validatedMounts);
   }
 
-  return mounts;
+  return { mounts };
 }
 
 async function buildContainerArgs(
@@ -375,7 +397,12 @@ export async function runContainerAgent(
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain, input.projectSlug);
+  const { mounts, worktreeDir, projectDir } = buildVolumeMounts(
+    group,
+    input.isMain,
+    input.projectSlug,
+    input.branchName,
+  );
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   // Main group uses the default OneCLI agent; others use their own agent.
@@ -543,6 +570,18 @@ export async function runContainerAgent(
     container.on('close', (code) => {
       clearTimeout(timeout);
       const duration = Date.now() - startTime;
+
+      // Clean up worktree after container exits
+      if (worktreeDir && projectDir) {
+        try {
+          removeWorktree(projectDir, worktreeDir);
+        } catch (err) {
+          logger.warn(
+            { err, worktreeDir },
+            'Failed to clean up worktree after container exit',
+          );
+        }
+      }
 
       if (timedOut) {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');

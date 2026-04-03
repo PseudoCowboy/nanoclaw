@@ -640,29 +640,22 @@ async function main(): Promise<void> {
   // No real secrets exist in the container environment.
   const sdkEnv: Record<string, string | undefined> = { ...process.env };
 
-  // Agent isolation: checkout the designated branch in the shared workspace.
-  // The stream watcher on the host creates the branch; we just switch to it.
+  // Agent isolation: the host mounts a branch-specific worktree at /workspace/shared.
+  // We only verify we're on the expected branch — no switching.
   if (containerInput.branchName) {
     const wsShared = '/workspace/shared';
     if (fs.existsSync(path.join(wsShared, '.git'))) {
-      let checkedOut = false;
       try {
-        execFileSync('git', ['checkout', containerInput.branchName], { cwd: wsShared, encoding: 'utf8', timeout: 10000 });
-        log(`Checked out branch: ${containerInput.branchName}`);
-        checkedOut = true;
-      } catch {
-        try {
-          execFileSync('git', ['checkout', '-b', containerInput.branchName], { cwd: wsShared, encoding: 'utf8', timeout: 10000 });
-          log(`Created and checked out branch: ${containerInput.branchName}`);
-          checkedOut = true;
-        } catch (branchErr) {
-          log(`FATAL: Failed to checkout branch: ${branchErr instanceof Error ? branchErr.message : String(branchErr)}`);
+        const currentBranch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+          cwd: wsShared, encoding: 'utf8', timeout: 5000,
+        }).trim();
+        if (currentBranch !== containerInput.branchName) {
+          log(`WARNING: Expected branch ${containerInput.branchName} but worktree is on ${currentBranch}`);
+        } else {
+          log(`Verified worktree is on branch: ${containerInput.branchName}`);
         }
-      }
-      if (!checkedOut) {
-        // Abort — running on the wrong branch breaks isolation
-        log('Aborting: could not checkout designated branch. Agent would run on wrong branch.');
-        process.exit(1);
+      } catch (err) {
+        log(`Could not verify branch: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
