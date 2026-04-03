@@ -84,6 +84,13 @@ if [ ${#EXISTING[@]} -eq 0 ]; then
   exit 0
 fi
 
+# Run garbage collection / maintenance
+echo "Running maintenance..."
+cd "${PROJECT_DIR}" && npx tsx -e "
+  import { runMaintenance } from './src/maintenance.js';
+  runMaintenance();
+" 2>&1 || echo "Maintenance had errors (non-fatal)"
+
 # Rotate logs before backup to avoid bloated archives
 "${PROJECT_DIR}/scripts/rotate-logs.sh" 2>/dev/null || true
 

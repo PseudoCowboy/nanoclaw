@@ -381,6 +381,11 @@ async function buildContainerArgs(
   // Allow containers to reach host services (e.g., copilot-api proxy)
   args.push('--add-host', 'host.docker.internal:host-gateway');
 
+  // Labels for lifecycle tracking and label-based cleanup
+  args.push('--label', 'nanoclaw=true');
+  args.push('--label', `nanoclaw.group=${containerName.split('-')[1] || 'unknown'}`);
+  args.push('--label', `nanoclaw.created=${new Date().toISOString()}`);
+
   args.push(CONTAINER_IMAGE);
 
   return args;

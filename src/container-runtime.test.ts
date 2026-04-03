@@ -22,6 +22,7 @@ import {
   stopContainer,
   ensureContainerRuntimeRunning,
   cleanupOrphans,
+  cleanupStaleContainers,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 

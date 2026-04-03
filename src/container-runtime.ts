@@ -75,6 +75,40 @@ export function ensureContainerRuntimeRunning(): void {
   }
 }
 
+/** Remove containers labeled nanoclaw that have been running too long (stuck) or exited. */
+export function cleanupStaleContainers(): void {
+  try {
+    const running = execSync(
+      `${CONTAINER_RUNTIME_BIN} ps --filter "label=nanoclaw=true" --format '{{.ID}}\\t{{.RunningFor}}\\t{{.Names}}'`,
+      { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+    ).trim();
+
+    if (!running) return;
+
+    for (const line of running.split('\n').filter(Boolean)) {
+      const parts = line.split('\t');
+      const name = parts[2] || parts[0];
+      const age = parts[1] || '';
+      if (/\d+\s+(hours|days)/.test(age)) {
+        try {
+          stopContainer(name);
+          logger.info({ name, age }, 'Stopped stale container');
+        } catch {
+          /* already stopped */
+        }
+      }
+    }
+
+    // Prune exited nanoclaw containers
+    execSync(
+      `${CONTAINER_RUNTIME_BIN} container prune --filter "label=nanoclaw=true" --force`,
+      { stdio: 'pipe' },
+    );
+  } catch (err) {
+    logger.warn({ err }, 'Failed to clean up stale containers');
+  }
+}
+
 /** Kill orphaned NanoClaw containers from previous runs. */
 export function cleanupOrphans(): void {
   try {
