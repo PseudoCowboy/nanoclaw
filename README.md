@@ -149,6 +149,13 @@ Key files:
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
 - `groups/*/CLAUDE.md` - Per-group memory
 
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — System diagram, data flow, state boundaries, IPC protocol, how to extend
+- [AGENTS.md](AGENTS.md) — Discord multi-agent setup (Iris, Athena, Hermes, Atlas, Apollo, Argus)
+- [docs/decisions/](docs/decisions/) — Architecture Decision Records (ADRs)
+- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) — Original requirements and design philosophy
+
 ## FAQ
 
 **Why Docker?**
