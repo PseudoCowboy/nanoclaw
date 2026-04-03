@@ -4,114 +4,95 @@
 
 **Resume instructions:** If session breaks, read this file first, then check TaskList for progress.
 
+**Codex Review:** See `docs/plans/2026-04-03-codex-review.md` for GPT-5.4 review of Tasks 2, 3, 5, 6.
+
 ---
 
 ## Task 1: Check Current Context Size ✅ DONE
 
-**Status:** Completed in-session
-**Finding:** We are using `opus-4.6-1m` which supports 1M context. Current session is within limits. The Claude Code settings don't explicitly set a context/model parameter — it's controlled by the CLI invocation. No issues found.
+**Finding:** Using `opus-4.6-1m` which supports 1M context. No issues.
 
 ---
 
-## Task 2: Audit Built-in WebSearch Tool (Container Agents)
+## Task 2: Audit Built-in WebSearch Tool ✅ DONE
 
-**Status:** Pending Codex Review
-**Goal:** The built-in `WebSearch` tool in Claude Code Agent SDK should use Gemini for search. Verify if it does, and if not, fix it.
+**Finding:** The Claude Agent SDK's built-in `WebSearch` tool does NOT use Gemini. It uses Anthropic's own search infrastructure. The SDK provides no configuration option to change the search backend. Options to get Gemini-backed search:
+1. Disable built-in `WebSearch` and create a custom MCP tool that shells out to `gemini -p`
+2. Keep built-in `WebSearch` as-is, and agents can also use `gemini -p` directly via the Gemini skill for Google-backed search
+3. Build a Gemini search MCP server and register it in the container runner
 
-**Current findings:**
-- `container/agent-runner/src/index.ts` line 434 includes `WebSearch` and `WebFetch` in `allowedTools`
-- The `WebSearch` tool is a built-in Claude Agent SDK tool — its implementation is inside the SDK, not in our code
-- `container/skills/web-search/SKILL.md` is a **separate** skill that uses curl/DuckDuckGo/agent-browser — this is the container-side fallback
-- The built-in `WebSearch` uses whatever search backend Anthropic's SDK provides (Google by default in the SDK)
-- There is NO configuration in our codebase to route `WebSearch` to Gemini
-
-**Question for review:** Does the user want the built-in SDK `WebSearch` to route through Gemini, or is the current setup (SDK default + DuckDuckGo fallback skill) acceptable? If Gemini search is desired, we'd need to implement a custom MCP tool or modify the search skill.
+The `container/skills/web-search/SKILL.md` is a fallback using DuckDuckGo/agent-browser — not Gemini-backed either.
 
 ---
 
-## Task 3: Compact Commits Into Logical Groups
+## Task 3: Compact Commits ✅ DONE
 
-**Status:** Pending Codex Review
-**Goal:** Reorganize the 54 commits ahead of `origin/main` into logical squashed commits.
+**Result:** 54 commits compacted into 7 logical commits:
 
-**Current commits ahead of origin/main (54 commits):**
+| # | Commit | Description |
+|---|--------|-------------|
+| 1 | `4263cb9` | Infrastructure, container tooling, and system-level changes |
+| 2 | `665f13f` | Discord channel, agent bot framework, channel optimization |
+| 3 | `c419037` | Hermes/Prometheus agents, Unified Iris, multi-JID support |
+| 4 | `354090e` | Discord orchestration commands with tests |
+| 5 | `2926668` | File-based collaborative discussion system |
+| 6 | `32ad96d` | Discord commands monolith split, workstreams, multi-agent fix, Phase 6-7 |
+| 7 | `9019d78` | Analysis docs, agent-first principles, gap analysis, review artifacts |
 
-Proposed grouping:
-
-### Group A: Infrastructure & Setup (commits: 7b9f2ef, d12404f, 099a44f, 39657db, 7d852d8)
-- Add Codex CLI tool, .worktrees gitignore, container rebuild fix, financial design doc, uncommitted changes commit
-
-### Group B: Discord Channel & Agent Bots (commits: e29bc6d, 38d98c5, fa11d16, e517e76)
-- Add Discord channel, agent bot framework, centralize infrastructure, optimize channel system
-
-### Group C: Discord Agent Bots — Hermes & Prometheus (commits: f6e9aa3, aecba75, 7a2e8fb, c7c8b64, 61cc445, 09cab74)
-- Add Hermes and Prometheus agents, planning discussion system design
-
-### Group D: Unified Iris & Multi-JID Support (commits: 078ce0f, 9c0ed96, 58a9abd, 7c39996, cac0437, b15c552, b839910, a16e8c3, 4ac8563)
-- Unified Iris, multi-JID groups, folder serialization, migration
-
-### Group E: Discord Orchestration Commands (commits: a3ac845, 06be542, 7bb7dd6, 6de1125, 3ef8609, cd999f2, 83133f9)
-- 15 orchestration commands, Prettier formatting, tests, bug fixes
-
-### Group F: File-Based Discussion System (commits: b47e8dc, 3584a2a, e806ade, 4c98693, e5450bc, d8645e7, 70dc26a, 86414a1, 428725e, 622c3ae, 814314c, c269ccc)
-- File-based collaborative discussion design, implementation, Iris watchdog
-
-### Group G: Workstream Execution & Stream Watchers (commits: 7109778, 0f2cc10, 0c50010, 9f8b1a5, e875995)
-- Workstream monitoring plan, stream watcher implementation, cmdDecompose rewrite
-
-### Group H: Discord Multi-Agent Fix & Phase 6-7 (commits: cc65f47, 339729c, 1ec22c3, 6e5001e, 1bd6e33, f7a04be)
-- Multi-agent fix phases 0-5, Codex review fixes, monolith split, git branch isolation
-
-### Group I: Formatting & Style (commits: ea69d37, 9a34f09)
-- Prettier formatting, local customizations commit
+**Backup:** `backup/pre-compact-20260403` branch preserves original 54-commit history.
 
 ---
 
-## Task 4: Merge origin/main
+## Task 4: Merge origin/main ✅ DONE
 
-**Status:** Pending (blocked by Task 3)
-**Goal:** After compacting commits, merge `origin/main` into local `main`.
-**Risk:** origin/main has ~100+ commits diverged. Expect merge conflicts in `package.json`, `package-lock.json`, possibly `src/index.ts`, `container/agent-runner/src/index.ts`.
+**Result:** Successfully merged origin/main (387 commits). Resolved 13 merge conflicts:
+- `.env.example`, `CLAUDE.md`, `package.json`, `package-lock.json`
+- `src/index.ts`, `src/types.ts`, `src/container-runner.ts`
+- `container/agent-runner/src/index.ts`, `container/agent-runner/src/ipc-mcp-stdio.ts`
+- `groups/global/CLAUDE.md`, `groups/main/CLAUDE.md`
+- `agents/tsconfig.json` (rename/delete), `scripts/run-migrations.ts` (modify/delete)
 
----
-
-## Task 5: Analyze Discord Multi-Bot Workflow Status
-
-**Status:** Pending Codex Review
-**Goal:** Check if the current Discord multi-bot workflow follows the agent-first development principles.
-
-**Existing analysis:** `docs/DISCORD-WORKFLOW-VS-PRINCIPLES.md` (dated 2026-03-24) already exists with a detailed principle-by-principle comparison. Need to verify if it's still current after the Phase 6-7 commits.
-
-**Key areas to audit:**
-- P1: Repo as single source of truth — plan index, decision log
-- P2: Agent legibility — branch isolation (Phase 7 added this), observability
-- P3: Enforce architecture mechanically — CI/linting/tests
-- P4: Feedback loops — stream watchers, Argus review
-- P5: Plans as first-class artifacts — plan lifecycle
-- P6: Garbage collection — stale branches, old containers
-- P7: Throughput over gatekeeping — parallel execution
-- P8: Boring technology — tech choices
+Fixed: duplicate `deleteSession` import, installed missing deps (`grammy`, `discord.js`).
+Build passes. 423/425 tests pass (2 pre-existing discord-commands test failures).
 
 ---
 
-## Task 6: Goal vs. Current Status Gap Analysis
+## Task 5: Discord Multi-Bot Workflow Analysis ✅ DONE
 
-**Status:** Pending Codex Review
-**Goal:** Summarize the user's goals for NanoClaw, compare against current implementation status, and identify gaps.
+**Codex review summary** (see `docs/plans/2026-04-03-codex-review.md` Task 5):
 
-**Existing docs:**
-- `docs/GAP-ANALYSIS.md` (dated 2026-03-24) — principle-based gap analysis
-- `docs/SPEC.md` — specification
-- `docs/REQUIREMENTS.md` — architecture decisions
+| Principle | Previous (2026-03-24) | Current (2026-04-03) |
+|-----------|----------------------|---------------------|
+| P1: Repo as truth | Partial | Stronger partial — plan lifecycle tracking exists |
+| P2: Agent legibility | Partial | Improved — branch-aware execution, but not true worktree isolation |
+| P3: Enforce mechanically | Missing | Still missing — no default lints, no CI invariants |
+| P4: Feedback loops | Partial | Substantially improved — Argus review loop is real |
+| P5: Plans as artifacts | Partial | Improved — lifecycle tracking in SQLite |
+| P6: Garbage collection | Missing | Still weak — no scheduled quality scans |
+| P7: Throughput | Partial | Mixed — more parallel-capable but shared working tree limits safety |
+| P8: Boring technology | Good | Good (unchanged) |
 
-**Key goals to assess:**
-1. Multi-channel personal assistant (WhatsApp, Telegram, Discord, Slack, Gmail)
-2. Container-isolated agent execution
-3. Discord multi-agent development workflow (Athena, Hermes, Atlas, Apollo, Argus)
-4. File-based collaboration between agents
-5. Scheduled tasks and automation
-6. AI tool integration (Claude, Codex, Gemini) in containers
-7. Per-group memory and isolation
+---
+
+## Task 6: Goal vs Current Status Gap Analysis ✅ DONE
+
+**Codex review summary** (see `docs/plans/2026-04-03-codex-review.md` Task 6):
+
+### Achieved:
+- Container-isolated agent execution (strong)
+- Discord multi-agent workflow (substantial)
+- File-based collaboration (achieved)
+- Persistent memory and isolation (mostly achieved)
+- Scheduled tasks infrastructure (achieved)
+- AI tool integration in containers (partial to strong partial)
+
+### Remaining Gaps:
+1. **Channel coverage incomplete** — WhatsApp not in current channel dir, Slack/Gmail missing
+2. **Phase 7 branch isolation != true workspace isolation** — shared working tree still allows cross-agent interference
+3. **Mechanical enforcement weak** — no default lints, no CI, no structural tests
+4. **Repo knowledge structure incomplete** — no ARCHITECTURE.md, AGENTS.md, or decision log
+5. **Garbage collection missing** — no automated stale-branch/container cleanup
+6. **WebSearch not Gemini-backed** — built-in SDK tool uses Anthropic's search, not Gemini
 
 ---
 
@@ -120,7 +101,10 @@ Proposed grouping:
 | Document | Path |
 |----------|------|
 | This task file | `docs/plans/2026-04-03-session-tasks.md` |
+| Codex review | `docs/plans/2026-04-03-codex-review.md` |
 | Discord workflow analysis | `docs/DISCORD-WORKFLOW-VS-PRINCIPLES.md` |
 | Gap analysis | `docs/GAP-ANALYSIS.md` |
+| Agent-First Principles | `docs/AGENT-FIRST-PRINCIPLES.md` |
 | Spec | `docs/SPEC.md` |
 | Requirements | `docs/REQUIREMENTS.md` |
+| Backup branch | `backup/pre-compact-20260403` |
