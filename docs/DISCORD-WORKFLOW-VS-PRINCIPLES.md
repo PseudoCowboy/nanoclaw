@@ -1,8 +1,8 @@
 # Discord Bot Development Workflow vs. Agent-First Principles
 
-Generated: 2026-03-24
+Generated: 2026-03-24 | Updated: 2026-04-03
 
-Comparison of the current Discord bot multi-agent development workflow (6 skills + 17 commands + 5 agents) against [Agent-First Development Principles](./AGENT-FIRST-PRINCIPLES.md).
+Comparison of the current Discord bot multi-agent development workflow (6 skills + 18 commands + 5 agents) against [Agent-First Development Principles](./AGENT-FIRST-PRINCIPLES.md).
 
 ---
 
@@ -31,7 +31,7 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 |---|---|---|---|
 | Where knowledge lives | Encoded in repo | Plans in `/workspace/shared/plans/`, discussions in `discuss-<slug>/` git repos | ✅ Good |
 | Progressive disclosure | Short index → deep docs | No index. Plans pile up in flat folders. No `ARCHITECTURE.md` or `AGENTS.md` | ❌ Missing |
-| Specs & decisions | In-repo, versioned | `!create_spec` generates a template but no standard for recording decisions | ⚠️ Partial |
+| Specs & decisions | In-repo, versioned | No standard for recording decisions | ⚠️ Partial |
 
 **Gap:** No plan index, no decision log, no central map. An agent arriving mid-project has no way to quickly understand the current state.
 
@@ -41,11 +41,11 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 
 | Aspect | Principle says | Discord workflow does | Verdict |
 |---|---|---|---|
-| Observable by agents | Logs, metrics, UI inspectable | `discord-status` checks systemd services + containers. Agents can read shared files. | ⚠️ Basic |
-| Isolated environments | Worktree per agent | Agents work on per-agent git branches (e.g., `agent/atlas/backend`). Stream watcher merges to main after Argus review. | ⚠️ Branch-based |
+| Observable by agents | Logs, metrics, UI inspectable | `discord-status` checks systemd services + containers. Agents can read shared files. Stream watchers provide hourly status reports and silence detection. | ⚠️ Basic |
+| Isolated environments | Worktree per agent | `container-runner.ts` creates per-agent git worktrees when projectSlug + branchName are set. Each agent works on an isolated checkout mounted at `/workspace/shared`. | ✅ Implemented |
 | If agent can't inspect it, it doesn't exist | Everything observable | Agent-browser exists but no automated observability. Agents can't query build logs, test results, or CI status. | ❌ Missing |
 
-**Gap:** No isolated worktrees for parallel implementation. Atlas and Apollo writing to the same `src/` can conflict. No way for agents to inspect test results, build output, or running services.
+**Gap:** Per-agent worktree isolation is implemented for workstream execution. The remaining gap is observability: agents can't inspect test results, build output, or running services programmatically.
 
 ---
 
@@ -57,7 +57,7 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 | Agent-readable lint errors | Lint messages include remediation | No linting at all | ❌ Missing |
 | Invariants over implementations | Enforce "what" not "how" | No invariants defined anywhere | ❌ Missing |
 
-**Gap:** Biggest miss. There's nothing stopping Atlas from importing frontend code, Apollo from bypassing the API contract, or anyone from violating architecture boundaries. The `!create_contract` command generates a template but nothing validates adherence.
+**Gap:** Biggest miss. There's nothing stopping Atlas from importing frontend code, Apollo from bypassing the API contract, or anyone from violating architecture boundaries. No linting or contract validation exists.
 
 ---
 
@@ -65,11 +65,11 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 
 | Aspect | Principle says | Discord workflow does | Verdict |
 |---|---|---|---|
-| Agent-to-agent review | Automated review loops until satisfied | Athena↔Hermes in planning. Argus auto-reviews each task via `discord-review-workstream` skill. Iterates up to 3 rounds. | ✅ Good |
-| Skills & tools | Build capabilities agents can invoke | 4 Discord skills + web-search + codex + gemini + agent-browser | ✅ Good |
-| Ralph Wiggum Loop | Agents iterate on PRs until clean | Stream watcher drives implement → review → fix cycles via task-state.json. Escalates after 3 rounds. | ✅ Good |
+| Agent-to-agent review | Automated review loops until satisfied | Athena↔Hermes in planning. Argus auto-reviews each task via `discord-review-workstream` skill. Stream watcher drives implement → review → fix cycles via task-state.json. Escalates after 3 rounds. | ✅ Good |
+| Skills & tools | Build capabilities agents can invoke | 6 Discord skills + web-search + codex + gemini + agent-browser | ✅ Good |
+| Ralph Wiggum Loop | Agents iterate on PRs until clean | Stream watcher drives implement → review → fix cycles via task-state.json. Escalates after 3 rounds. QA streams with Argus as lead are auto-approved. | ✅ Good |
 
-**Gap:** The discussion workflow has a single review pass (Hermes reviews → Athena finalizes). No iterative loop. Argus is defined as "monitor" but has no automated review capability — it's notified but never acts autonomously.
+**Gap:** The planning workflow is less rigorous than the workstream loop — a single Hermes→Athena→Hermes pass rather than iterative review. Feedback loops are specific to Discord orchestration, not generalized to repo-wide CI.
 
 ---
 
@@ -82,7 +82,7 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 | Lifecycle tracking | Active / completed / abandoned | `!plans` command shows plan lifecycle from SQLite index. Plans tracked as active/completed. | ✅ Good |
 | Lightweight vs. detailed | Scale to task size | One-size-fits-all discussion protocol regardless of task complexity | ⚠️ Rigid |
 
-**Gap:** Plans are created and finalized but never tracked after. No way to know which plans are active, which were implemented, which were abandoned. No decision log explaining "why" choices were made.
+**Gap:** Plans have lifecycle tracking via `!plans`, but no decision log explaining "why" choices were made. No progress log alongside plans.
 
 ---
 
@@ -104,10 +104,10 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 | Aspect | Principle says | Discord workflow does | Verdict |
 |---|---|---|---|
 | Short-lived PRs | Minimal blocking gates | No PR concept at all. Work goes directly to shared files. | ⚠️ Different model |
-| Corrections over blocking | Fix-forward | `!escalate_blocker` blocks for human intervention. Discussion requires human sign-off on disagreements. | ⚠️ Blocks |
-| Parallel execution | Independent tasks in parallel | Atlas (backend) + Apollo (frontend) could work in parallel, but share the same workspace with no isolation | ⚠️ Risky |
+| Corrections over blocking | Fix-forward | `!blocker` escalates to human intervention. Discussion requires human sign-off. | ⚠️ Blocks |
+| Parallel execution | Independent tasks in parallel | Atlas (backend) + Apollo (frontend) work in parallel on isolated git worktrees via `container-runner.ts` | ✅ Implemented |
 
-**Gap:** The `!escalate_blocker` and human-decides-disagreements patterns create blocking points. No fix-forward culture. Parallel agent work is theoretically possible but unsafe without isolated workspaces.
+**Gap:** The `!blocker` escalation pattern creates a blocking point. No fix-forward culture. Parallel agent work uses per-agent worktree isolation.
 
 ---
 
@@ -127,24 +127,25 @@ Comparison of the current Discord bot multi-agent development workflow (6 skills
 ### High Priority (blocking agent effectiveness)
 
 1. **No mechanical enforcement (P3)** — Add linting, structural tests, contract validation. Without this, agents can silently break architecture.
-2. **Argus is a ghost (P4/P6)** — Argus is defined but does nothing. Wire it up as an automated reviewer and quality scanner.
-3. **No workspace isolation (P2)** — Atlas and Apollo sharing `/workspace/shared/src/` is a conflict risk. Need per-agent branches or worktrees.
+2. **No background quality scans (P6)** — Use the task scheduler to run periodic drift detection. Argus could do this but doesn't yet.
 
 ### Medium Priority (reducing human bottlenecks)
 
-4. **No plan lifecycle (P5)** — Add status tracking (active/completed/abandoned), decision logs, and a plan index.
-5. **No iterative review loops (P4)** — Discussion does one pass. Implementation has zero review. Add automated review-iterate cycles.
-6. **No progressive disclosure (P1)** — Add `AGENTS.md` and `ARCHITECTURE.md` so agents can self-orient.
+3. **No iterative planning loop (P4)** — Planning is a single Hermes→Athena→Hermes pass. Consider adding iterative review.
+4. **No plan lifecycle beyond active/completed (P5)** — No decision log explaining "why" choices were made.
+5. **No progressive disclosure (P1)** — Add `AGENTS.md` and `ARCHITECTURE.md` so agents can self-orient.
 
 ### Low Priority (nice to have)
 
-7. **No background quality scans (P6)** — Use the task scheduler to run periodic drift detection.
-8. **Blocking patterns (P7)** — Reduce human decision points; let agents fix-forward with human review after.
+6. **Blocking patterns (P7)** — Reduce human decision points; let agents fix-forward with human review after.
 
 ### What's Already Good
 
 - ✅ Git-backed plan files with agent authorship
-- ✅ Skills system gives agents real tools
+- ✅ Skills system gives agents real tools (6 Discord skills + 3 AI tools)
 - ✅ Boring technology stack
-- ✅ Discussion workflow is lightweight (2 agents, 4 steps)
+- ✅ Per-agent worktree isolation for workstream execution
+- ✅ Real state machine driving implement → review → approve cycles
+- ✅ Argus actively reviews code via stream watcher automation
 - ✅ File-based collaboration model (agents read/write markdown, not APIs)
+- ✅ Restart recovery for stream watchers, projects, and planning sessions

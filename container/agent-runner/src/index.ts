@@ -649,7 +649,8 @@ async function main(): Promise<void> {
           cwd: wsShared, encoding: 'utf8', timeout: 5000,
         }).trim();
         if (currentBranch !== containerInput.branchName) {
-          log(`WARNING: Expected branch ${containerInput.branchName} but worktree is on ${currentBranch}`);
+          log(`FATAL: Expected branch ${containerInput.branchName} but worktree is on ${currentBranch}. Aborting.`);
+          process.exit(1);
         } else {
           log(`Verified worktree is on branch: ${containerInput.branchName}`);
         }

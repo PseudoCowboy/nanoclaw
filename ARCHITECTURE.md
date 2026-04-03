@@ -90,7 +90,7 @@ Single Node.js process that receives messages from channels, queues them per-gro
  │  │  tools: Bash, Read, │  │  send_message           │                  │
  │  │   Write, Edit,      │  │  send_document          │                  │
  │  │   Glob, Grep,       │  │  schedule_task          │                  │
- │  │   WebSearch,        │  │  list_tasks             │                  │
+ │  │   gemini_search,    │  │  list_tasks             │                  │
  │  │   WebFetch,         │  │  pause/resume/cancel    │                  │
  │  │   Task, TeamCreate, │  │  update_task            │                  │
  │  │   mcp__nanoclaw__*  │  │  register_group         │                  │
@@ -172,7 +172,7 @@ Calls query() with prompt, session resume, MCP config
     │
     ▼
 Claude Agent SDK processes prompt
-    │  Uses tools: Bash, Read, Write, Grep, WebSearch, mcp__nanoclaw__*
+    │  Uses tools: Bash, Read, Write, Grep, WebFetch, mcp__nanoclaw__*
     │
     ▼
 For each result message:
@@ -301,7 +301,7 @@ Each group's isolated memory and history. Mounted **read-write** at `/workspace/
 ### Per-Project State
 `groups/shared_project/active/<slug>/` — git repos with workstream branches
 
-Shared workspaces scoped by project slug. When a `projectSlug` is set, the container mount is scoped to just that project directory (not the full shared_project tree). Agents on different branches work in isolation via git checkout at container startup.
+Shared workspaces scoped by project slug. When a `projectSlug` is set, the host creates per-agent git worktrees and mounts them; the container only verifies the branch. Agents on different branches work in isolation via these worktrees.
 
 ### Container-Only State
 `/workspace/` mounts, `/tmp/`, agent process memory
@@ -355,7 +355,7 @@ NanoClaw supports multi-agent orchestration on Discord, where specialized agents
                   Each workstream gets a channel with assigned agents
 
 4. Implementation  Atlas (backend) and Apollo (frontend) work in parallel
-                   Each agent checks out its own branch in the shared workspace
+                   Each agent works in its own git worktree (created by the host)
                    File-based coordination via workspace watcher
 
 5. Review       Argus monitors progress, runs tests, reviews code

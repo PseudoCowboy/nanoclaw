@@ -120,7 +120,7 @@ export async function cmdCreateProject(
               value:
                 '```\n' +
                 `active/${projectSlug}/\n` +
-                '\u251C\u2500 control/          draft-plan.md, approved-plan.md\n' +
+                '\u251C\u2500 control/          draft-plan.md\n' +
                 '\u251C\u2500 coordination/     progress, deps, status-board\n' +
                 '\u251C\u2500 workstreams/      per-team scope + handoffs\n' +
                 '\u2514\u2500 archive/          completed work\n' +

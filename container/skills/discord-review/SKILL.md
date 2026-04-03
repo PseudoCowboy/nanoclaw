@@ -1,12 +1,15 @@
 ---
 name: discord-review
-description: Automated code review protocol for Discord projects via GitHub PRs. Argus reviews PRs, runs lint/structural checks, leaves review comments, and iterates with the implementer until approved. Triggered by @Argus review or when a PR is opened.
+description: GitHub PR review protocol for Argus. Use when reviewing work via GitHub PRs (e.g., when agents push branches and open PRs). For task-state.json-driven workstream reviews, see discord-review-workstream instead.
 allowed-tools: Bash(gh:*), Bash(git:*), Bash(bash:*)
 ---
 
-# Discord Code Review Protocol (GitHub PR)
+# GitHub PR Code Review Protocol
 
-When triggered to review code, follow this protocol. You (Argus) review via GitHub PRs — never merge directly to main.
+Use this protocol when reviewing code submitted as GitHub PRs. This is separate from the workstream review protocol (`discord-review-workstream`) which uses `task-state.json` and is triggered by the stream watcher.
+
+**When to use this skill:** When an agent has pushed a branch to GitHub and opened a PR.
+**When to use `discord-review-workstream` instead:** When working in a `ws-*` channel with `task-state.json`-driven execution.
 
 ## Overview
 
@@ -30,11 +33,10 @@ gh pr diff PR_NUMBER --repo OWNER/REPO
 Check out the PR branch locally and run the linter + structural tests:
 
 ```bash
-cd /workspace/shared/projects/PROJECT-argus/
+cd /workspace/shared/workstreams/STREAM/
 git fetch origin
 git checkout BRANCH_NAME
-bash lint-architecture.sh .
-bash test-structure.sh .
+bash ../../lint-check.sh
 ```
 
 If checks fail, request changes immediately — no need for semantic review yet.
@@ -93,6 +95,6 @@ When triggered again:
 Remind all agents to sync their worktrees:
 
 ```bash
-cd /workspace/shared/projects/PROJECT-AGENT/
+cd /workspace/shared/workstreams/STREAM-AGENT/
 git pull origin main
 ```

@@ -19,6 +19,7 @@ import { startDiscussionWatchdog } from './discussion.js';
 import { setOrchestrationState, getAllOrchestrationState } from '../../db.js';
 import {
   savePlanningSession,
+  saveDiscussionSession,
   deletePlanningSession,
 } from './stream-watcher.js';
 
@@ -130,6 +131,13 @@ export async function cmdPlan(message: Message, client: Client): Promise<void> {
       currentAgent: null,
       channelId: channel.id,
     });
+    saveDiscussionSession(channel.id, {
+      topic,
+      slug,
+      round: 0,
+      currentAgent: null,
+      channelId: channel.id,
+    });
 
     // 4. Determine where to post — if called from control-room, post in plan-room
     let targetChannel = channel;
@@ -148,6 +156,16 @@ export async function cmdPlan(message: Message, client: Client): Promise<void> {
           round: 0,
           currentAgent: null,
           channelId: planRoom.id,
+          // Track the control-room as source so cleanup can remove both entries
+          sourceChannelId: channel.id,
+        });
+        saveDiscussionSession(planRoom.id, {
+          topic,
+          slug,
+          round: 0,
+          currentAgent: null,
+          channelId: planRoom.id,
+          sourceChannelId: channel.id,
         });
         await channel.send(
           `\u{1F4CB} Planning session started in ${planRoom.toString()} for: **${topic}**`,
@@ -193,6 +211,7 @@ export async function cmdPlan(message: Message, client: Client): Promise<void> {
     if (session) {
       session.round = 1;
       session.currentAgent = 'Hermes';
+      saveDiscussionSession(targetChannel.id, session);
     }
 
     await targetChannel.send(

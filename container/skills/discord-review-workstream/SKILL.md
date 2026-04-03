@@ -46,18 +46,51 @@ git diff HEAD~1 HEAD
 
 ## Step 3 — Run Mechanical Checks (if available)
 
-Check the project root (two levels above the stream directory) for a `lint-check.sh`:
+Check the project root for available checks and run them in order. Skip any that don't exist:
 
 ```bash
 PROJECT_ROOT=$(cd "$STREAM_DIR/../.." && pwd)
-if [ -f "$PROJECT_ROOT/lint-check.sh" ]; then
-  LINT_OUTPUT=$(bash "$PROJECT_ROOT/lint-check.sh" 2>&1)
+
+# 1. Architecture lint (if exists)
+if [ -f "$PROJECT_ROOT/lint-architecture.sh" ]; then
+  echo "=== Architecture Lint ==="
+  LINT_OUTPUT=$(bash "$PROJECT_ROOT/lint-architecture.sh" 2>&1)
   LINT_EXIT=$?
   echo "$LINT_OUTPUT"
+  if [ $LINT_EXIT -ne 0 ]; then echo "LINT_FAILED"; fi
+fi
+
+# 2. TypeScript check (if tsconfig exists)
+if [ -f "$PROJECT_ROOT/tsconfig.json" ]; then
+  echo "=== TypeScript Check ==="
+  TSC_OUTPUT=$(cd "$PROJECT_ROOT" && npx tsc --noEmit 2>&1)
+  TSC_EXIT=$?
+  echo "$TSC_OUTPUT"
+  if [ $TSC_EXIT -ne 0 ]; then echo "TYPECHECK_FAILED"; fi
+fi
+
+# 3. Tests (if package.json has test script)
+if [ -f "$PROJECT_ROOT/package.json" ] && grep -q '"test"' "$PROJECT_ROOT/package.json"; then
+  echo "=== Tests ==="
+  TEST_OUTPUT=$(cd "$PROJECT_ROOT" && npm test 2>&1)
+  TEST_EXIT=$?
+  echo "$TEST_OUTPUT"
+  if [ $TEST_EXIT -ne 0 ]; then echo "TESTS_FAILED"; fi
+fi
+
+# 4. Python checks (if pyproject.toml or requirements.txt exists)
+if [ -f "$PROJECT_ROOT/pyproject.toml" ] || [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+  if command -v pytest &>/dev/null; then
+    echo "=== Pytest ==="
+    PYTEST_OUTPUT=$(cd "$PROJECT_ROOT" && pytest 2>&1)
+    PYTEST_EXIT=$?
+    echo "$PYTEST_OUTPUT"
+    if [ $PYTEST_EXIT -ne 0 ]; then echo "TESTS_FAILED"; fi
+  fi
 fi
 ```
 
-If mechanical checks fail (exit code non-zero OR output contains `LINT_FAILED` or `TESTS_FAILED`), immediately set status to `changes_requested` and report the failures. Do not proceed to semantic review.
+If any check fails (exit code non-zero OR output contains `LINT_FAILED`, `TYPECHECK_FAILED`, or `TESTS_FAILED`), immediately set status to `changes_requested` and report the failures. Do not proceed to semantic review.
 
 ## Step 4 — Semantic Review
 

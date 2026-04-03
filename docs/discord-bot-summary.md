@@ -52,7 +52,7 @@ DiscordChannel class (src/channels/discord.ts)
 
 ---
 
-## All `!` Commands (17 total)
+## All `!` Commands (18 total)
 
 ### Info & Help
 
@@ -65,7 +65,7 @@ DiscordChannel class (src/channels/discord.ts)
 
 | Command | Description |
 |---------|-------------|
-| `!create_project Name` | Creates a Discord category with core channels: `control-room`, `plan-room`, `backend-dev`, `frontend-ui`, `qa-alerts` |
+| `!create_project Name` | Creates a Discord category with core channels: `control-room`, `plan-room`, `release-log`. Work streams (`ws-*`) added later via `!decompose` |
 | `!cleanup_server` | Removes all orchestration categories and their channels |
 
 ### Planning & Discussion
@@ -86,6 +86,21 @@ DiscordChannel class (src/channels/discord.ts)
 | `!logs <agent>` | Recent agent log output |
 | `!dashboard` | Project-wide status from coordination files |
 | `!blocker "description"` | Escalate blocker to control-room |
+
+### Work Streams
+
+| Command | Description |
+|---------|-------------|
+| `!add_stream type` | Add a work stream (backend, frontend, qa, design, devops, research) |
+| `!handoff from to "desc"` | Create cross-team handoff, notifies target stream |
+| `!stream_status` | Read progress from workstream files |
+
+### Checkpoints
+
+| Command | Description |
+|---------|-------------|
+| `!checkpoint from to` | Verify handoff completeness between two streams |
+| `!checkpoints` | List all checkpoints and their status |
 
 ---
 
@@ -135,14 +150,14 @@ The Discord bot coordinates **5 AI agents**, each with a distinct role and prefe
 
 ## Container Skills (Agent-Side)
 
-Agents inside containers have 5 Discord-specific skills:
+Agents inside containers have 6 Discord-specific skills:
 
 | Skill | Purpose |
 |-------|---------|
 | `discord-discussion` | Protocol for file-based discussions — git conventions, round behavior, handoff chain |
 | `discord-project` | Creates project directory structures in `/workspace/shared/` |
 | `discord-status` | Checks health of all NanoClaw services, containers, and disk usage |
-| `discord-plan` | Orchestrates multi-agent planning debates via IPC messages |
+| `discord-plan` | Orchestrates multi-agent planning sessions via Discord @mentions |
 | `discord-workstream` | Task-by-task execution protocol — implements one task, updates task-state.json, commits, exits |
 | `discord-review-workstream` | Argus code review protocol — reviews diffs, updates task-state.json to approved/changes_requested |
 
@@ -150,7 +165,7 @@ Agents inside containers have 5 Discord-specific skills:
 
 ## Project Channel Structure
 
-When `!create_project` runs, it creates:
+When `!create_project` runs, it creates a Discord category with three core channels:
 
 ```
 ProjectName (Category)
@@ -159,7 +174,7 @@ ProjectName (Category)
   └── #release-log — Human + Argus | Deliveries, summaries, sign-offs
 ```
 
-After `!decompose`, additional channels are created:
+After `!decompose`, additional work stream channels are created:
 ```
   ├── #ws-backend — Atlas, Argus | Backend workstream tasks
   ├── #ws-frontend — Apollo, Argus | Frontend workstream tasks

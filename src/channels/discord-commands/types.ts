@@ -9,9 +9,12 @@ export interface PlanningSession {
 export interface DiscussionSession {
   topic: string;
   slug: string;
-  round: number; // 0 = not started, 1 = improve, 2 = disagree, 3 = resolve
+  round: number; // 0 = not started, 1-4 = step number
   currentAgent: string | null;
   channelId: string;
+  /** When !plan runs from control-room, this stores the control-room channel ID
+   *  so the completion handler can clean up both channels' session entries. */
+  sourceChannelId?: string;
 }
 
 export interface WorkStream {

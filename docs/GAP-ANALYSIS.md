@@ -1,6 +1,6 @@
 # NanoClaw Gap Analysis: Agent-First Principles vs. Current State
 
-Generated: 2026-03-24
+Generated: 2026-03-24 | Updated: 2026-04-03
 
 Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the current NanoClaw implementation.
 
@@ -9,9 +9,9 @@ Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the 
 | Principle | Status | Gap Severity |
 |---|---|---|
 | 1. Repo as single source of truth | Partial | Medium |
-| 2. Agent legibility | Partial | Medium |
+| 2. Agent legibility | Good | Low |
 | 3. Enforce architecture mechanically | Missing | High |
-| 4. Build feedback loops | Partial | Medium |
+| 4. Build feedback loops | Good | Low |
 | 5. Plans as first-class artifacts | Partial | Medium |
 | 6. Continuous garbage collection | Missing | High |
 | 7. Throughput over gatekeeping | Partial | Low |
@@ -38,9 +38,11 @@ Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the 
 - Containers get isolated filesystems per group
 - `agent-browser` skill exists for DOM inspection
 - Logs centralized in `logs/`
+- `container-runner.ts` creates per-agent git worktrees when projectSlug + branchName are set
+- Stream watchers provide hourly status reports and silence detection
+- Workspace watchers track file changes across coordination files
 
 **Gaps:**
-- No git worktree-per-agent isolation
 - No local observability stack (LogQL/PromQL) — agents can't query metrics
 - No automated UI testing or screenshot diffing
 - Agents can't inspect running services inside other containers
@@ -61,24 +63,27 @@ Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the 
 ### 4. Build Feedback Loops, Not Instructions
 
 **Current state:**
-- Skills system exists (web-search, codex, gemini, agent-browser)
-- `discord-discussion` has Athena <-> Hermes review loop
+- Skills system exists (web-search, codex, gemini, agent-browser, 6 discord skills)
+- `discord-discussion` has Hermes ↔ Athena 4-step workflow
+- Stream watcher drives implement → review → approve/changes_requested cycles
+- Argus is actively wired into the review gate via task-state.json
+- Review rounds are counted and escalated to control-room after 3 rounds
+- QA streams with Argus as lead auto-approve (no self-review)
 
 **Gaps:**
-- No automated "Ralph Wiggum Loop" — review is manual handoff via @mentions
+- Planning workflow is a single pass (not iterative review)
 - No self-improving feedback loops where agents identify missing capabilities
-- No automated PR review cycle (agent opens PR, another agent reviews, iterate until clean)
+- Feedback loops are orchestration-specific, not generalized to repo-wide CI
 
 ### 5. Plans as First-Class Artifacts
 
 **Current state:**
 - `docs/plans/` stores plans as markdown files
 - `discord-discussion` uses `plan-v2.md` with git commits
+- `!plans` command provides lifecycle tracking (active/completed) via SQLite index
 
 **Gaps:**
-- No plan index tracking active vs. completed vs. abandoned
 - No progress logs or decision logs inside plans
-- Plans pile up in `docs/plans/` with no lifecycle management
 - No standard plan template with status field, decision log section
 
 ### 6. Continuous Garbage Collection
@@ -104,7 +109,6 @@ Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the 
 - No PR creation or merge automation
 - No flaky test handling strategy
 - Discussion workflow has mandatory human sign-off which can block
-- No parallel agent execution on independent tasks
 
 ### 8. Use "Boring" Technology
 
@@ -120,8 +124,6 @@ Comparison of [Agent-First Principles](./AGENT-FIRST-PRINCIPLES.md) against the 
 
 1. **Mechanical enforcement** (Principle 3) — linters, structural tests, architecture boundaries
 2. **Continuous garbage collection** (Principle 6) — scheduled quality scans using existing task scheduler
-3. **Plan lifecycle management** (Principle 5) — plan index, templates, status tracking
+3. **Plan lifecycle management** (Principle 5) — decision logs, plan templates
 4. **Repo knowledge structure** (Principle 1) — ARCHITECTURE.md, AGENTS.md, progressive disclosure
-5. **Automated review loops** (Principle 4) — agent-to-agent PR review automation
-6. **Agent legibility** (Principle 2) — observability, worktree isolation
-7. **Throughput** (Principle 7) — PR automation, fix-forward strategy
+5. **Throughput** (Principle 7) — PR automation, fix-forward strategy

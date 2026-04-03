@@ -19,6 +19,8 @@ import {
   activeStreamWatchers,
   channelBranchMap,
   activeProjects,
+  planningSessions,
+  discussionSessions,
 } from './state.js';
 import { countTasks } from './helpers.js';
 import type {
@@ -216,6 +218,7 @@ export function saveDiscussionSession(
     round: number;
     currentAgent: string | null;
     channelId: string;
+    sourceChannelId?: string;
   },
 ): void {
   setOrchestrationState(
@@ -243,10 +246,10 @@ export function deleteDiscussionSession(channelId: string): void {
  * Rehydrate stream watchers and projects from SQLite after Discord client connects.
  * Recreates interval handles and message listeners from persisted metadata.
  */
-export function rehydrateOrchestrationState(
+export async function rehydrateOrchestrationState(
   client: Client,
   guild: { channels: { cache: { find: (fn: (c: any) => boolean) => any } } },
-): void {
+): Promise<void> {
   const rows = getAllOrchestrationState('stream_watcher');
   let rehydrated = 0;
 
@@ -344,6 +347,80 @@ export function rehydrateOrchestrationState(
       logger.warn(
         { err: err.message, key: row.key },
         'Failed to rehydrate project',
+      );
+    }
+  }
+
+  // Rehydrate planning sessions
+  const planningRows = getAllOrchestrationState('planning_session');
+  for (const row of planningRows) {
+    try {
+      const meta = JSON.parse(row.data);
+      const channelId = meta.channelId || row.key.replace(/^plan:/, '');
+      if (!planningSessions.has(channelId)) {
+        planningSessions.set(channelId, {
+          topic: meta.topic,
+          featureId: meta.featureId ?? null,
+          round: meta.round ?? 0,
+        });
+        logger.info({ channelId, topic: meta.topic }, 'Rehydrated planning session from SQLite');
+      }
+    } catch (err: any) {
+      logger.warn(
+        { err: err.message, key: row.key },
+        'Failed to rehydrate planning session',
+      );
+    }
+  }
+
+  // Rehydrate discussion sessions
+  const discussionRows = getAllOrchestrationState('discussion_session');
+  for (const row of discussionRows) {
+    try {
+      const meta = JSON.parse(row.data);
+      const channelId = meta.channelId || row.key.replace(/^disc:/, '');
+      if (!discussionSessions.has(channelId)) {
+        discussionSessions.set(channelId, {
+          topic: meta.topic,
+          slug: meta.slug,
+          round: meta.round ?? 0,
+          currentAgent: meta.currentAgent ?? null,
+          channelId,
+          sourceChannelId: meta.sourceChannelId,
+        });
+
+        // Restart discussion watchdog if session was in progress (round > 0)
+        if (meta.round > 0) {
+          const discChannel = guild.channels.cache.find(
+            (c: any) => c.id === channelId,
+          ) as TextChannel | undefined;
+          if (discChannel) {
+            // Lazy import to avoid circular dependency
+            const { startDiscussionWatchdog } = await import('./discussion.js');
+            startDiscussionWatchdog(client, discChannel, meta.slug);
+            logger.info(
+              { channelId, slug: meta.slug, round: meta.round },
+              'Rehydrated discussion session and restarted watchdog',
+            );
+          } else {
+            logger.warn(
+              { channelId, slug: meta.slug },
+              'Discussion channel not found — cleaning up stale session',
+            );
+            deleteOrchestrationState(row.key);
+            discussionSessions.delete(channelId);
+          }
+        } else {
+          logger.info(
+            { channelId, slug: meta.slug },
+            'Rehydrated discussion session (not yet started)',
+          );
+        }
+      }
+    } catch (err: any) {
+      logger.warn(
+        { err: err.message, key: row.key },
+        'Failed to rehydrate discussion session',
       );
     }
   }
@@ -608,9 +685,25 @@ export function startStreamWatcher(
 
           switch (currentTask.status) {
             case 'implemented': {
-              // Agent finished task → trigger Argus review
+              // Agent finished task → trigger review
               if (watcher.lastReviewedTaskId !== currentTask.id) {
                 watcher.lastReviewedTaskId = currentTask.id;
+
+                // If the lead agent IS Argus (e.g., ws-qa), auto-approve
+                // since Argus is the reviewer — can't meaningfully review itself
+                if (leadAgent === 'Argus') {
+                  currentTask.status = 'approved';
+                  currentTask.reviewRounds = (currentTask.reviewRounds || 0) + 1;
+                  writeTaskState(projectSlug, streamType, taskState);
+                  if (wsChannel) {
+                    await wsChannel.send(
+                      `\u2705 Task #${currentTask.id} auto-approved (Argus is both lead and reviewer).`,
+                    );
+                  }
+                  watcher.lastActivityTime = currentTime;
+                  break;
+                }
+
                 currentTask.status = 'in_review';
                 writeTaskState(projectSlug, streamType, taskState);
 

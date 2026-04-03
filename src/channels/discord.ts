@@ -62,7 +62,9 @@ export class DiscordChannel implements Channel {
         // Rehydrate persisted stream watchers after Discord is ready
         const guild = readyClient.guilds.cache.first();
         if (guild) {
-          rehydrateOrchestrationState(readyClient, guild);
+          rehydrateOrchestrationState(readyClient, guild).catch((err: any) => {
+            logger.error({ err }, 'Error rehydrating orchestration state');
+          });
         }
 
         resolve();

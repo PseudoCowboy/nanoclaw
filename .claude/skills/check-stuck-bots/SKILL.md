@@ -1,6 +1,6 @@
 # Check Stuck Discord Agent Bots
 
-Diagnose and fix stuck Discord agent bots (Athena, Hermes, Prometheus, Atlas, Apollo, Argus, Iris).
+Diagnose and fix stuck Discord agent bots (Athena, Hermes, Atlas, Apollo, Argus, Iris).
 
 Triggers: "check stuck", "bot stuck", "discord stuck", "agent stuck", "not responding"
 
@@ -17,7 +17,7 @@ ps aux | grep "/home/pseudo/nanoclaw/agents/.*\.ts" | grep -v grep | grep -v nod
 ps aux | grep "[d]iscord-bot/agents" | grep -v node_modules 2>&1
 
 # 1d. Agent bot logs (last 5 lines each)
-for agent in athena hermes prometheus atlas apollo argus; do
+for agent in athena hermes atlas apollo argus; do
   echo "=== $agent ==="
   tail -5 /home/pseudo/nanoclaw/agents/logs/$agent.log 2>/dev/null || echo "(no log)"
 done

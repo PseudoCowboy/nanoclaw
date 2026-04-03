@@ -1,33 +1,44 @@
 # Discord Plan Orchestration
 
-Trigger: user says `!plan FEAT-XXX description` or asks you to coordinate a planning session.
+Trigger: user says `!plan topic` in `#plan-room` or `#control-room`, or asks you to coordinate a planning session.
 
 ## What This Does
 
-You orchestrate a multi-agent planning debate in Discord. The agent bots (Athena, Hermes) each have their own Discord accounts and listen in the `#plan-room` channel.
+You orchestrate a multi-agent planning session in Discord. The agent bots (Hermes, Athena) each have their own Discord accounts and listen in `#plan-room` and `discuss-*` channels.
 
 ## Process
 
-1. **Parse the request** — extract feature ID (FEAT-XXX) and description
-2. **Kick off Round 1** — post `@Athena` in the plan-room channel with the feature request
-3. **Wait for Athena's plan** — she'll create a spec in `/workspace/shared/plans/`
-4. **Kick off Round 2** — post `@Hermes` asking to review
-5. **Collect feedback** — Hermes finds issues and suggests alternatives
-6. **Kick off Round 3** (if needed) — post `@Athena` with consolidated feedback for revision
-7. **Summarize** — post final plan status in control-room
+Iris handles the orchestration from the host side. Inside the container, your role is to respond when @mentioned:
 
-## How to Send Messages
+1. **Human runs `!plan topic`** — Iris saves a `plan.md` in the shared folder and posts a welcome embed
+2. **Step 2 — Hermes Reviews** — Iris @mentions Hermes first. Hermes reads `plan.md`, asks the human questions, creates `plan-v2.md`, commits, and hands off to @Athena
+3. **Step 3 — Athena Architects** — Athena reads `plan-v2.md`, refines the architecture, commits, and hands off to @Hermes
+4. **Step 4 — Hermes Finalizes** — Hermes incorporates any human feedback, produces the final version, and posts "Planning complete"
 
-Use `send_message` to post to Discord channels:
+## Shared Folder
+
+Plans are stored in the shared workspace:
+- **Project-scoped**: `/workspace/shared/plans/plan-<slug>/plan.md` and `plan-v2.md`
+- **Standalone discussions**: `/workspace/shared/discuss-<slug>/plan.md` and `plan-v2.md`
+
+## How Agents Are Triggered
+
+- Agents are triggered via @mentions in Discord messages (not IPC)
+- Hermes and Athena have `listenToBots: true` — they hear Iris and each other
+- The discussion watchdog monitors for handoff keywords (`@Athena`, `@Hermes`, `Planning complete`) and nudges agents after 5 minutes of silence
+
+## Git Conventions
+
+All plan changes are committed from inside the shared folder:
 ```bash
-# Post to plan-room (replace CHANNEL_ID with actual Discord channel ID)
-echo '{"type":"message","chatJid":"dc:CHANNEL_ID","text":"@Athena Round 1: Design a plan for FEAT-001 user authentication"}' > /workspace/ipc/messages/plan-$(date +%s).json
+cd /workspace/shared/plans/plan-<slug>/
+git add -A
+git commit --author="YourName <yourname@nanoclaw>" -m "description of changes"
 ```
 
 ## Important Notes
 
-- The agent bots are separate Discord users — they respond to @mentions automatically
-- You don't control the agents directly — you post messages that trigger them
-- Each round may take 30-60 seconds (container startup + AI processing)
-- Check `/workspace/shared/plans/` for written artifacts
-- The user sees the full debate in Discord in real-time
+- Hermes goes first (reviewer), then Athena (architect), then Hermes again (finalizer)
+- The human can interject at any time — agents should respond to human messages
+- Keep Discord messages concise — put detailed analysis in the markdown files
+- When done, Hermes posts "Planning complete" which signals Iris to close the session

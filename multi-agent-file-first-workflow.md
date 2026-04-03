@@ -12,21 +12,23 @@ Implementation of an enhanced multi-agent orchestration system featuring:
 
 **Core Workflow Requirements:**
 - [x] Control room human-AI collaboration interface
-- [x] Plan room 3-round refinement process
-- [ ] Automatic plan decomposition by work streams — `!decompose` takes explicit args or defaults; doesn't parse plan content
+- [x] Plan room 4-step workflow (Hermes → Athena → Hermes)
+- [x] Plan decomposition via `!decompose` — keyword-based auto-detection with explicit overrides
 - [x] Dynamic channel creation by Iris based on decomposed plans
-- [x] File-based agent coordination protocols — files exist; agents told to read them via Discord messages
+- [x] File-based agent coordination protocols — task-state.json drives execution
+- [x] Workstream execution with review gate (implement → review → approve/changes_requested)
 - [ ] Cross-team dependency tracking and notifications — `!handoff` and `!blocker` write files, but no automatic tracking/resolution
 - [ ] Integration checkpoint system for parallel work streams — placeholder text only, no verification code
-- [ ] Channel lifecycle management (creation, archival, cleanup) — creation + cleanup done; no archival on completion
+- [x] Channel lifecycle management (creation via !create_project/!decompose, cleanup via !cleanup_server)
 
 **Technical Requirements:**
 - [x] Shared workspace file structure and access protocols
-- [ ] Agent file-reading and status update capabilities — files scaffolded, but no code forces agents to read/update them
+- [x] Per-agent worktree isolation (container-runner creates worktrees when projectSlug + branchName are set)
 - [x] Iris orchestration logic for channel management
+- [x] Stream watcher monitoring (hourly status, silence detection, restart recovery)
 - [ ] Cross-room status synchronization system — `!dashboard`/`!stream_status` read files on demand; no auto-sync
 - [ ] Integration points detection and handoff automation — `!handoff` is manual; no auto-detection
-- [ ] Progress tracking via file commits and Git integration — `git init` + initial commit only; agents don't auto-commit
+- [ ] Progress tracking via file commits and Git integration — agents commit; no automated commit tracking
 
 ## Architecture
 
@@ -38,10 +40,10 @@ Implementation of an enhanced multi-agent orchestration system featuring:
    ├── Human writes draft-plan.md in control/ folder
    └── Requirements clarification
 
-2. Plan Room (3-Round Refinement)
-   ├── !plan topic — Athena → Hermes → Prometheus cycles
-   ├── Structured plan refinement with human comment windows
-   └── Approved plan written to control/approved-plan.md
+2. Plan Room (4-Step Workflow)
+   ├── !plan topic — Iris saves plan.md, Hermes reviews, Athena refines
+   ├── 4 steps: Human Input → Hermes Reviews → Athena Architects → Hermes Finalizes
+   └── Approved plan written to plan-v2.md in shared folder
 
 3. Plan Decomposition & Channel Creation
    ├── !decompose backend frontend qa — Iris analyzes plan
@@ -66,7 +68,6 @@ Implementation of an enhanced multi-agent orchestration system featuring:
 groups/shared_project/active/{project-slug}/
 ├── control/
 │   ├── draft-plan.md (written by human)
-│   ├── approved-plan.md (from plan room)
 │   └── decomposition.md (work stream breakdown)
 ├── coordination/
 │   ├── progress.md (auto-updated status)
@@ -94,7 +95,7 @@ groups/shared_project/active/{project-slug}/
 ```
 [ProjectName] (category)
 ├── #control-room — Human + Athena + Argus | Oversight, decisions
-├── #plan-room — Athena + Hermes + Prometheus | Planning debates
+├── #plan-room — Athena + Hermes + Human | Planning sessions
 ├── #release-log — Human + Argus | Deliveries, sign-offs
 ├── #ws-backend — Atlas + Argus | Backend work (created by !decompose)
 ├── #ws-frontend — Apollo + Argus | Frontend work (created by !decompose)
@@ -113,9 +114,9 @@ groups/shared_project/active/{project-slug}/
 ### Planning (use in #plan-room)
 | Command | Description |
 |---------|-------------|
-| `!plan topic` | Start 3-round planning session |
+| `!plan topic` | Start 4-step planning session |
+| `!plans` | Show all tracked plans with lifecycle status |
 | `!decompose [types]` | Break plan into work stream channels |
-| `!next` / `!skip` | Skip comment window during planning |
 
 ### Work Streams
 | Command | Description |
@@ -128,13 +129,16 @@ groups/shared_project/active/{project-slug}/
 | Command | Description |
 |---------|-------------|
 | `!agent_status` | Live agent process status |
+| `!logs <agent>` | Recent agent log output |
 | `!dashboard` | Project dashboard from coordination files |
 | `!blocker "issue"` | Escalate to #control-room |
+| `!checkpoint from to` | Verify handoff completeness between streams |
+| `!checkpoints` | List all checkpoints and status |
 
 ### Discussions (ad-hoc, independent of projects)
 | Command | Description |
 |---------|-------------|
-| `!create_discussion "topic"` | File-based 3-round discussion |
+| `!create_discussion "topic"` | File-based 4-step discussion |
 | `!close_discussion` | Delete discussion channel |
 
 ### Info
@@ -149,7 +153,6 @@ groups/shared_project/active/{project-slug}/
 |-------|------|------|-------------|
 | Athena | Plan Designer | Codex | Planning, Design |
 | Hermes | Strategy & Analysis | Claude | Planning |
-| Prometheus | Innovation & Alternatives | Gemini | Planning, Research |
 | Atlas | Backend Engineer | Claude | Backend, DevOps |
 | Apollo | Frontend Engineer | Gemini | Frontend, Design |
 | Argus | Monitor & Validator | Claude | QA, all streams |
@@ -163,7 +166,7 @@ groups/shared_project/active/{project-slug}/
 | qa | #ws-qa | Argus | Quality assurance |
 | design | #ws-design | Apollo + Athena | Design and UX |
 | devops | #ws-devops | Atlas | Infrastructure |
-| research | #ws-research | Prometheus | Exploration |
+| research | #ws-research | Athena | Exploration |
 
 ## Testing & Validation
 

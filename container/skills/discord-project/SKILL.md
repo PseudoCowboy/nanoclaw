@@ -4,43 +4,61 @@ Trigger: user says `!create_project NAME` or asks to set up a new project worksp
 
 ## What This Does
 
-Create a new project structure in the shared workspace and optionally set up Discord channels for it.
+Creates a file-first project workspace under `/workspace/shared/` with a standardized directory structure for multi-agent collaboration.
 
-## Process
+## Workspace Structure
 
-1. **Create project directory** in `/workspace/shared/`:
-   ```bash
-   mkdir -p /workspace/shared/projects/PROJECT_NAME/{src,tests,docs,plans,reviews,status}
-   ```
+When `!create_project` runs, Iris creates this structure on the host at `groups/shared_project/active/<slug>/`:
 
-2. **Create project README**:
-   ```bash
-   cat > /workspace/shared/projects/PROJECT_NAME/README.md << 'EOF'
-   # PROJECT_NAME
+```
+active/<project-slug>/
+├── control/                  # Human-managed planning artifacts
+│   ├── draft-plan.md         # Human writes initial plan here
+│   └── (planning artifacts added by !plan workflow)
+├── coordination/             # Cross-team status and dependencies
+│   ├── progress.md           # Auto-updated dashboard
+│   ├── dependencies.md       # Blocking relationships
+│   ├── integration-points.md # Cross-team handoffs
+│   └── status-board.md       # Real-time status
+├── workstreams/              # Empty — per-team folders created by !decompose
+├── archive/                  # Completed work
+└── lint-check.sh             # Mechanical validation script (customize per project)
+```
 
-   ## Overview
-   [Description]
+After `!decompose`, each workstream gets its own subfolder:
 
-   ## Structure
-   - `src/` — Source code
-   - `tests/` — Test files
-   - `docs/` — Documentation
-   - `plans/` — Feature plans (Athena)
-   - `reviews/` — Code reviews (Argus)
-   - `status/` — Task status updates
+```
+workstreams/backend/
+├── scope.md          # Deliverables and boundaries
+├── tasks.md          # Checklist from plan decomposition
+├── progress.md       # Agent-maintained progress log
+├── handoffs.md       # Cross-team integration points
+└── task-state.json   # Machine-readable task status (drives stream watcher)
+```
 
-   ## Agents
-   - **Athena** — Plans features
-   - **Atlas** — Backend implementation
-   - **Apollo** — Frontend implementation
-   - **Argus** — Code review
-   EOF
-   ```
+Inside containers, this is mounted at `/workspace/shared/`.
 
-3. **Notify the team** — use `send_message` to post in control-room that a new project is ready
+## Discord Channel Structure
+
+`!create_project` creates a Discord category with three core channels:
+
+```
+ProjectName (Category)
+├── #control-room — Human + Athena + Argus | Oversight, decisions
+├── #plan-room   — Athena + Hermes + Human | Planning sessions
+└── #release-log — Human + Argus | Deliveries, sign-offs
+```
+
+Work stream channels (`#ws-backend`, `#ws-frontend`, etc.) are created later by `!decompose`.
+
+## Agent Access
+
+- All project-scoped agents mount the project directory at `/workspace/shared/`
+- Each agent also has `/workspace/group/` for private notes
+- The workspace is git-initialized — agents should commit their changes
 
 ## Notes
 
-- All agents share `/workspace/shared/` — files written there are visible to everyone
-- Each agent also has `/workspace/group/` for private notes
-- The shared workspace persists across container restarts
+- Write your draft plan to `control/draft-plan.md` before running `!plan`
+- `lint-check.sh` is a template — customize it per project for mechanical validation
+- The workspace persists across container restarts (it's on the host filesystem)

@@ -57,7 +57,7 @@
 - Added Codex CLI and Gemini CLI as tools inside containers
 - Set up dual copilot-api proxy system (ports 4141 + 4142)
 - Created copilot-stealth-patch for header spoofing
-- Added 6-agent Discord bot system (Athena, Hermes, Prometheus, Atlas, Apollo, Argus)
+- Added 5-agent Discord bot system (Athena, Hermes, Atlas, Apollo, Argus)
 - Planning discussion system with multi-AI debate
 
 ---
@@ -271,25 +271,22 @@
 
 ## 6. Agent System (Discord Bots)
 
-### Path: `groups/telegram_main/discord-bot/agents/`
+### Path: `agents/`
 
-Six-agent system with role-based specialization:
+Five-agent system with role-based specialization:
 
 | Agent | AI Tool | Role | Channels |
 |-------|---------|------|----------|
 | **Athena** 🟣 | Codex | Plan Designer | control-room, plan-room |
 | **Hermes** 🟢 | Claude | Planning Collaborator | plan-room |
-| **Prometheus** 🟡 | Gemini | Planning Collaborator | plan-room |
-| **Atlas** 🔴 | Claude | Backend Engineer | backend-dev |
-| **Apollo** 🔵 | Gemini | Frontend Engineer | frontend-ui |
-| **Argus** 🟠 | Claude | Monitor | qa-alerts, control-room, backend-dev, frontend-ui |
+| **Atlas** 🔴 | Claude | Backend Engineer | ws-backend |
+| **Apollo** 🔵 | Gemini | Frontend Engineer | ws-frontend |
+| **Argus** 🟠 | Claude | Monitor & Reviewer | ws-qa, control-room, all ws-* channels |
 
 ### Files
-- `config/agent-config.json` — Agent roster and channel assignments
-- `hermes-bot.js` (174 lines) — Hermes bot implementation
-- `prometheus-bot.js` (174 lines) — Prometheus bot implementation
-- `shared/agent-utils.js` (192 lines) — Shared agent utilities
-- `start-all-agents.sh` (144 lines) — Agent lifecycle management script
+- `agents/config.json` — Agent roster and channel assignments
+- `agents/shared/agent-runner.ts` — Shared agent bot logic
+- `agents/start-all.sh` — Agent lifecycle management script
 
 ### Related Files in `groups/telegram_main/`
 - `discord-bot-config.json` — Discord bot configuration

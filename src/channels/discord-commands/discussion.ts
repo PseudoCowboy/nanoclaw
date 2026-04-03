@@ -80,6 +80,7 @@ export function startDiscussionWatchdog(
         if (nudgeTimer) clearTimeout(nudgeTimer);
         session.round = 3;
         session.currentAgent = 'Athena';
+        saveDiscussionSession(channel.id, session);
         resetNudgeTimer('Athena');
         return;
       }
@@ -92,6 +93,7 @@ export function startDiscussionWatchdog(
         if (nudgeTimer) clearTimeout(nudgeTimer);
         session.round = 4;
         session.currentAgent = 'Hermes';
+        saveDiscussionSession(channel.id, session);
         resetNudgeTimer('Hermes');
         return;
       }
@@ -110,6 +112,15 @@ export function startDiscussionWatchdog(
         // Also clean up the planning session created alongside the discussion
         planningSessions.delete(channel.id);
         deletePlanningSession(channel.id);
+
+        // If this discussion was started from control-room (!plan from control-room),
+        // also clean up the orphaned sessions on the source channel
+        if (session.sourceChannelId && session.sourceChannelId !== channel.id) {
+          discussionSessions.delete(session.sourceChannelId);
+          deleteDiscussionSession(session.sourceChannelId);
+          planningSessions.delete(session.sourceChannelId);
+          deletePlanningSession(session.sourceChannelId);
+        }
 
         const completeEmbed = new EmbedBuilder()
           .setColor(0x00ff00)
@@ -152,6 +163,33 @@ export function startDiscussionWatchdog(
           const planPath = candidatePaths.find((p) => fs.existsSync(p));
           if (planPath) {
             const planContent = fs.readFileSync(planPath, 'utf8').trim();
+
+            // Copy plan-v2.md to control/approved-plan.md so !decompose can find it
+            // after the planning session is cleaned up
+            if (projectSlug) {
+              const approvedPath = path.resolve(
+                process.cwd(),
+                'groups',
+                'shared_project',
+                'active',
+                projectSlug,
+                'control',
+                'approved-plan.md',
+              );
+              try {
+                fs.copyFileSync(planPath, approvedPath);
+                logger.info(
+                  { planPath, approvedPath },
+                  'Copied plan-v2.md to approved-plan.md',
+                );
+              } catch (copyErr: any) {
+                logger.warn(
+                  { err: copyErr },
+                  'Failed to copy plan-v2.md to approved-plan.md',
+                );
+              }
+            }
+
             if (planContent) {
               await channel.send('**\u{1F4C4} Final Plan:**');
               // Split into chunks respecting Discord's 2000 char limit
@@ -400,6 +438,7 @@ export async function cmdCreateDiscussion(
       if (session) {
         session.round = 1;
         session.currentAgent = 'Hermes';
+        saveDiscussionSession(discussChannel.id, session);
       }
 
       // Track as planning session too
