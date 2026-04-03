@@ -1,0 +1,28 @@
+#!/bin/bash
+# Pre-commit hook: runs architecture lint + structural tests
+# Install: cp pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+echo "Running pre-commit checks..."
+
+# Architecture lint
+if [ -f "lint-architecture.sh" ]; then
+  bash lint-architecture.sh .
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "🛑 Commit blocked: architecture violations found. Fix them first."
+    exit 1
+  fi
+fi
+
+# Structural tests
+if [ -f "test-structure.sh" ]; then
+  bash test-structure.sh .
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "🛑 Commit blocked: structural tests failed. Fix them first."
+    exit 1
+  fi
+fi
+
+echo "✅ Pre-commit checks passed."
+exit 0
