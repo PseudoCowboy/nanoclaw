@@ -4,6 +4,7 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -38,6 +39,8 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  projectSlug?: string; // Scopes workspace and memory to a specific project
+  branchName?: string; // Git branch for agent isolation in workstream channels
   secrets?: Record<string, string>;
 }
 
@@ -57,6 +60,7 @@ interface VolumeMount {
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
+  projectSlug?: string,
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
@@ -91,6 +95,24 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+
+    // Per-project memory — isolated context per project per agent
+    if (projectSlug) {
+      const projectMemDir = path.join(groupDir, 'projects', projectSlug);
+      fs.mkdirSync(projectMemDir, { recursive: true });
+      const projectMemFile = path.join(projectMemDir, 'CLAUDE.md');
+      if (!fs.existsSync(projectMemFile)) {
+        fs.writeFileSync(
+          projectMemFile,
+          `# Project: ${projectSlug}\n\nProject-specific memory. Updated automatically by the agent.\n`,
+        );
+      }
+      mounts.push({
+        hostPath: projectMemDir,
+        containerPath: '/workspace/project-memory',
+        readonly: false,
+      });
+    }
   } else {
     // Other groups only get their own folder
     mounts.push({
@@ -98,6 +120,24 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+
+    // Per-project memory — isolated context per project per agent
+    if (projectSlug) {
+      const projectMemDir = path.join(groupDir, 'projects', projectSlug);
+      fs.mkdirSync(projectMemDir, { recursive: true });
+      const projectMemFile = path.join(projectMemDir, 'CLAUDE.md');
+      if (!fs.existsSync(projectMemFile)) {
+        fs.writeFileSync(
+          projectMemFile,
+          `# Project: ${projectSlug}\n\nProject-specific memory. Updated automatically by the agent.\n`,
+        );
+      }
+      mounts.push({
+        hostPath: projectMemDir,
+        containerPath: '/workspace/project-memory',
+        readonly: false,
+      });
+    }
 
     // Global memory directory (read-only for non-main)
     // Only directory mounts are supported, not file mounts
@@ -109,6 +149,37 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+  }
+
+  // Shared project directory — if projectSlug is set, scope to just that project for isolation.
+  const sharedDir = path.join(GROUPS_DIR, 'shared_project');
+  if (projectSlug) {
+    const projectDir = path.join(sharedDir, 'active', projectSlug);
+    if (fs.existsSync(projectDir)) {
+      mounts.push({
+        hostPath: projectDir,
+        containerPath: '/workspace/shared',
+        readonly: false,
+      });
+    } else {
+      logger.warn(
+        { projectSlug },
+        'Project directory not found, falling back to full shared mount',
+      );
+      if (fs.existsSync(sharedDir)) {
+        mounts.push({
+          hostPath: sharedDir,
+          containerPath: '/workspace/shared',
+          readonly: false,
+        });
+      }
+    }
+  } else if (fs.existsSync(sharedDir)) {
+    mounts.push({
+      hostPath: sharedDir,
+      containerPath: '/workspace/shared',
+      readonly: false,
+    });
   }
 
   // Per-group Claude sessions directory (isolated from other groups)
@@ -161,6 +232,17 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Mount Gemini CLI credentials (Google OAuth) if available on host.
+  // Read-only so agents can use `gemini -p` but can't modify auth state.
+  const geminiDir = path.join(os.homedir(), '.gemini');
+  if (fs.existsSync(geminiDir)) {
+    mounts.push({
+      hostPath: geminiDir,
+      containerPath: '/home/node/.gemini',
+      readonly: true,
+    });
+  }
+
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
@@ -176,6 +258,10 @@ function buildVolumeMounts(
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.
+  //
+  // On every container spawn, canonical files are synced into the per-group
+  // directory. Files the agent added (not present in canonical source) are
+  // preserved so agent customizations survive updates.
   const agentRunnerSrc = path.join(
     projectRoot,
     'container',
@@ -188,8 +274,14 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  if (fs.existsSync(agentRunnerSrc)) {
+    fs.mkdirSync(groupAgentRunnerDir, { recursive: true });
+    // Sync canonical files into the per-group directory (overwrite stale copies)
+    for (const file of fs.readdirSync(agentRunnerSrc)) {
+      const srcFile = path.join(agentRunnerSrc, file);
+      if (!fs.statSync(srcFile).isFile()) continue;
+      fs.copyFileSync(srcFile, path.join(groupAgentRunnerDir, file));
+    }
   }
   mounts.push({
     hostPath: groupAgentRunnerDir,
@@ -250,6 +342,9 @@ function buildContainerArgs(
     }
   }
 
+  // Allow containers to reach host services (e.g., copilot-api proxy)
+  args.push('--add-host', 'host.docker.internal:host-gateway');
+
   args.push(CONTAINER_IMAGE);
 
   return args;
@@ -266,7 +361,7 @@ export async function runContainerAgent(
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain);
+  const mounts = buildVolumeMounts(group, input.isMain, input.projectSlug);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);

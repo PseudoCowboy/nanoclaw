@@ -41,15 +41,16 @@ const server = new McpServer({
 
 server.tool(
   'send_message',
-  "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times. Note: when running as a scheduled task, your final output is NOT sent to the user — use this tool if you need to communicate with the user or group.",
+  "Send a message to a channel. By default sends to the originating channel. Use `target_jid` to send to a different channel (e.g., to trigger agents in #plan-room). Check /workspace/group/channel-jids.json for available channel JIDs and their names.",
   {
     text: z.string().describe('The message text to send'),
+    target_jid: z.string().optional().describe('JID of the target channel (e.g. "dc:123456"). If omitted, sends to the originating channel. Look up JIDs from /workspace/group/channel-jids.json.'),
     sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
   },
   async (args) => {
     const data: Record<string, string | undefined> = {
       type: 'message',
-      chatJid,
+      chatJid: args.target_jid || chatJid,
       text: args.text,
       sender: args.sender || undefined,
       groupFolder,
@@ -58,7 +59,70 @@ server.tool(
 
     writeIpcFile(MESSAGES_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: 'Message sent.' }] };
+    return { content: [{ type: 'text' as const, text: `Message sent to ${args.target_jid || chatJid}.` }] };
+  },
+);
+
+server.tool(
+  'send_document',
+  "Send a file as a document attachment to the user or group. The file must exist under /workspace/group/ (e.g., in /workspace/group/outbox/). Use this for sending tarballs, images, PDFs, or any file the user requests. Max file size: 50MB (Telegram limit).",
+  {
+    file_path: z.string().describe('Absolute path to the file inside the container. Must be under /workspace/group/ (e.g., /workspace/group/outbox/report.tar.gz)'),
+    caption: z.string().optional().describe('Optional caption to display with the document'),
+    sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
+  },
+  async (args) => {
+    const GROUP_BASE = '/workspace/group';
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB Telegram bot limit
+
+    // Security: ensure path is under /workspace/group/
+    const resolved = path.resolve(args.file_path);
+    if (!resolved.startsWith(GROUP_BASE + '/')) {
+      return {
+        content: [{ type: 'text' as const, text: `File path must be under ${GROUP_BASE}/. Got: ${args.file_path}` }],
+        isError: true,
+      };
+    }
+
+    // Check file exists
+    if (!fs.existsSync(resolved)) {
+      return {
+        content: [{ type: 'text' as const, text: `File not found: ${resolved}` }],
+        isError: true,
+      };
+    }
+
+    // Check file size
+    const stat = fs.statSync(resolved);
+    if (!stat.isFile()) {
+      return {
+        content: [{ type: 'text' as const, text: `Not a file: ${resolved}` }],
+        isError: true,
+      };
+    }
+    if (stat.size > MAX_SIZE) {
+      return {
+        content: [{ type: 'text' as const, text: `File too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit.` }],
+        isError: true,
+      };
+    }
+
+    // Store relative path from /workspace/group/ for host-side resolution
+    const relativePath = path.relative(GROUP_BASE, resolved);
+
+    const data: Record<string, string | undefined> = {
+      type: 'document',
+      chatJid,
+      filePath: relativePath,
+      caption: args.caption || undefined,
+      sender: args.sender || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `Document queued for sending: ${path.basename(resolved)}` }] };
   },
 );
 

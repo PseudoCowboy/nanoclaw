@@ -16,6 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 
@@ -27,6 +28,7 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  branchName?: string;
   secrets?: Record<string, string>;
 }
 
@@ -361,7 +363,7 @@ async function runQuery(
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; api400Error: boolean }> {
   const stream = new MessageStream();
   stream.push(prompt);
 
@@ -390,6 +392,7 @@ async function runQuery(
   let lastAssistantUuid: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
+  let api400Error = false;
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
@@ -417,6 +420,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
+      model: 'claude-opus-4.6-1m',
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
@@ -476,6 +480,15 @@ async function runQuery(
     if (message.type === 'result') {
       resultCount++;
       const textResult = 'result' in message ? (message as { result?: string }).result : null;
+
+      // Detect copilot-api 400 errors — context too large for the proxy
+      if (textResult && /API Error: 400/.test(textResult)) {
+        log(`Detected API 400 error (context too large): ${textResult.slice(0, 200)}`);
+        api400Error = true;
+        // Don't write this error to the user yet — we'll retry
+        continue;
+      }
+
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
       writeOutput({
         status: 'success',
@@ -486,8 +499,8 @@ async function runQuery(
   }
 
   ipcPolling = false;
-  log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
-  return { newSessionId, lastAssistantUuid, closedDuringQuery };
+  log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}, api400Error: ${api400Error}`);
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, api400Error };
 }
 
 async function main(): Promise<void> {
@@ -515,6 +528,33 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
+  // Agent isolation: checkout the designated branch in the shared workspace.
+  // The stream watcher on the host creates the branch; we just switch to it.
+  if (containerInput.branchName) {
+    const wsShared = '/workspace/shared';
+    if (fs.existsSync(path.join(wsShared, '.git'))) {
+      let checkedOut = false;
+      try {
+        execFileSync('git', ['checkout', containerInput.branchName], { cwd: wsShared, encoding: 'utf8', timeout: 10000 });
+        log(`Checked out branch: ${containerInput.branchName}`);
+        checkedOut = true;
+      } catch {
+        try {
+          execFileSync('git', ['checkout', '-b', containerInput.branchName], { cwd: wsShared, encoding: 'utf8', timeout: 10000 });
+          log(`Created and checked out branch: ${containerInput.branchName}`);
+          checkedOut = true;
+        } catch (branchErr) {
+          log(`FATAL: Failed to checkout branch: ${branchErr instanceof Error ? branchErr.message : String(branchErr)}`);
+        }
+      }
+      if (!checkedOut) {
+        // Abort — running on the wrong branch breaks isolation
+        log('Aborting: could not checkout designated branch. Agent would run on wrong branch.');
+        process.exit(1);
+      }
+    }
+  }
+
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 
@@ -537,9 +577,10 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
+  let retryCount = 0;
   try {
     while (true) {
-      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
+      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'}, retryCount: ${retryCount})...`);
 
       const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
@@ -548,6 +589,37 @@ async function main(): Promise<void> {
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
       }
+
+      // Handle copilot-api 400 errors with progressive retry
+      if (queryResult.api400Error) {
+        if (retryCount === 0) {
+          // First retry: same session, no resumeAt (forces re-read/compaction)
+          log('API 400 error, retrying with compaction (attempt 1)...');
+          retryCount++;
+          resumeAt = undefined;
+          continue;
+        } else if (retryCount === 1) {
+          // Second retry: new session (drop all history)
+          log('API 400 error persists, retrying with fresh session (attempt 2)...');
+          retryCount++;
+          sessionId = undefined;
+          resumeAt = undefined;
+          continue;
+        } else {
+          // Give up — write error to user
+          log('API 400 error after all retries, reporting to user');
+          writeOutput({
+            status: 'error',
+            result: 'The conversation context has become too large. Starting fresh — please resend your message.',
+            newSessionId: sessionId,
+            error: 'Context too large after retries'
+          });
+          break;
+        }
+      }
+
+      // Reset retry count on success
+      retryCount = 0;
 
       // If _close was consumed during the query, exit immediately.
       // Don't emit a session-update marker (it would reset the host's
@@ -583,6 +655,14 @@ async function main(): Promise<void> {
     });
     process.exit(1);
   }
+
+  // Explicitly exit after the query loop ends. The SDK and MCP server child
+  // processes keep handles alive (open sockets, timers), so the Node.js event
+  // loop won't drain on its own. Without this, the container stays running
+  // indefinitely after the agent finishes, blocking the host from spawning a
+  // new container for subsequent messages.
+  log('Main loop ended, exiting process');
+  process.exit(0);
 }
 
 main();

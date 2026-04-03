@@ -30,8 +30,19 @@ RUN apt-get update && apt-get install -y \
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install agent-browser and claude-code globally
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+# Install agent-browser, claude-code, codex, and gemini globally
+RUN npm install -g agent-browser @anthropic-ai/claude-code @openai/codex @google/gemini-cli
+
+# Codex CLI config — use copilot-api-responses proxy on host (port 4142)
+# Codex requires the Responses API (/v1/responses) which only the
+# @jeffreycao/copilot-api fork supports. The original copilot-api on port 4141
+# only supports Chat Completions and is used by Claude Code.
+RUN mkdir -p /home/node/.codex && \
+    printf 'model = "gpt-5.4"\nmodel_provider = "copilot"\n\n[model_providers.copilot]\nname = "GitHub Copilot"\nbase_url = "http://host.docker.internal:4142/v1"\nenv_key = "COPILOT_API_KEY"\nwire_api = "responses"\nrequires_openai_auth = false\nsupports_websockets = false\n' > /home/node/.codex/config.toml && \
+    chown -R node:node /home/node/.codex
+
+# Dummy API key for Codex (real auth handled by copilot-api proxy on host)
+ENV COPILOT_API_KEY=dummy
 
 # Create app directory
 WORKDIR /app

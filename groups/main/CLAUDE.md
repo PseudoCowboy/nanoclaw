@@ -18,6 +18,8 @@ Your output is sent to the user or group.
 
 You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
+You also have `mcp__nanoclaw__send_document` which sends a file as a document attachment. The file must be under `/workspace/group/` (e.g., `/workspace/group/outbox/myfile.tar.gz`). Use this whenever the user asks you to send them a file — tar it up if needed, place it in `/workspace/group/outbox/`, and call `send_document` with the path and an optional caption. Max file size: 50MB.
+
 ### Internal thoughts
 
 If part of your output is internal reasoning rather than something for the user, wrap it in `<internal>` tags:
@@ -58,6 +60,24 @@ Keep messages clean and readable for WhatsApp.
 ## Admin Context
 
 This is the **main channel**, which has elevated privileges.
+
+## Backup Awareness
+
+A daily backup runs at 03:00 via systemd timer (`nanoclaw-checkpoint`). It captures:
+
+- `groups/` — all group folders (CLAUDE.md, scripts, files agents create)
+- `store/` — SQLite database (messages, scheduled tasks, registered groups, sessions)
+- `data/sessions/` — per-group Claude session data (agent memory, project history)
+- `data/env/`, `data/codex/`, `data/gemini/` — synced configs from host
+- `data/systemd/` — systemd service/timer files
+- `.env` — API keys and bot tokens
+- `.nanoclaw/` — skills engine state
+- `.claude/settings.local.json` — project-level Claude Code permissions
+- `~/.config/nanoclaw/` — mount and sender allowlists
+
+**When creating groups or setting up projects for agents:**
+- Files in `/workspace/group/` are automatically backed up (they map to `groups/{folder}/`)
+- Additional mounts to host paths (e.g., `~/projects/foo`) are NOT backed up by the daily checkpoint. If a project at an additional mount is important, tell the user to add it to their own backup strategy or keep essential config in the group folder.
 
 ## Container Mounts
 

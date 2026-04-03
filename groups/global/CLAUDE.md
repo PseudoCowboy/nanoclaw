@@ -34,9 +34,17 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
-## Your Workspace
+## Your Workspace & Backup
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
+
+**Important:** Only `/workspace/group/` is included in the daily backup. Everything else inside the container is ephemeral and will be lost when the container stops. When setting up projects, bots, services, or anything that should survive restarts:
+
+- **Configuration, scripts, and small files** → store in `/workspace/group/`
+- **Notes, plans, documentation** → store in `/workspace/group/`
+- **Large code projects** that need their own git repo → tell the user you need an additional mount set up so the project lives on the host filesystem
+
+If you create something important outside `/workspace/group/`, always save a copy or reference in `/workspace/group/` so it's not lost.
 
 ## Memory
 
@@ -56,3 +64,12 @@ NEVER use markdown. Only use WhatsApp/Telegram formatting:
 - ```triple backticks``` for code
 
 No ## headings. No [links](url). No **double stars**.
+
+## Known Limitation: Agent Bots Don't Persist Sessions
+
+The 5 Discord agent bots (Athena, Hermes, Atlas, Apollo, Argus) create a fresh Claude session on every invocation. They do NOT pass `sessionId` to `runContainerAgent()`. Their "memory" between triggers comes only from:
+1. Discord channel message history (`channel.messages.fetch()` — last 50 messages)
+2. Files in `/workspace/group/` (persisted group folder)
+3. Files in `/workspace/shared/` (shared project folder)
+
+This means no conversation continuity across triggers — each invocation starts fresh. To preserve context, agents should write important state to their group folder or the shared workspace.

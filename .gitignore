@@ -8,15 +8,38 @@ dist/
 store/
 data/
 logs/
+backups/
 
 # Groups - only track base structure and specific CLAUDE.md files
 groups/*
 !groups/main/
 !groups/global/
+!groups/iris/
+!groups/dc_athena/
+!groups/dc_hermes/
+!groups/dc_prometheus/
+!groups/dc_atlas/
+!groups/dc_apollo/
+!groups/dc_argus/
+!groups/shared_project/
 groups/main/*
 groups/global/*
+groups/iris/*
+groups/dc_athena/*
+groups/dc_hermes/*
+groups/dc_prometheus/*
+groups/dc_atlas/*
+groups/dc_apollo/*
+groups/dc_argus/*
 !groups/main/CLAUDE.md
 !groups/global/CLAUDE.md
+!groups/iris/CLAUDE.md
+!groups/dc_athena/CLAUDE.md
+!groups/dc_hermes/CLAUDE.md
+!groups/dc_prometheus/CLAUDE.md
+!groups/dc_atlas/CLAUDE.md
+!groups/dc_apollo/CLAUDE.md
+!groups/dc_argus/CLAUDE.md
 
 # Secrets
 *.keys.json
@@ -36,3 +59,9 @@ groups/global/*
 .nanoclaw/
 
 agents-sdk-docs
+
+# Worktrees
+.worktrees/
+
+# Work sessions (local debugging artifacts)
+.work-sessions/

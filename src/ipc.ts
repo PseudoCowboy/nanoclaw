@@ -6,12 +6,17 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
-import { isValidGroupFolder } from './group-folder.js';
+import { isValidGroupFolder, resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  sendDocument: (
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroups: (force: boolean) => Promise<void>;
@@ -75,10 +80,18 @@ export function startIpcWatcher(deps: IpcDeps): void {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
                 // Authorization: verify this group can send to this chatJid
+                // Main groups can send anywhere. Other groups can send to:
+                // 1. Their own JIDs (same folder)
+                // 2. Any registered Discord JID (cross-channel orchestration within same server)
                 const targetGroup = registeredGroups[data.chatJid];
+                const isDiscordCrossChannel =
+                  sourceGroup.startsWith('dc_') &&
+                  data.chatJid.startsWith('dc:') &&
+                  targetGroup;
                 if (
                   isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
+                  (targetGroup && targetGroup.folder === sourceGroup) ||
+                  isDiscordCrossChannel
                 ) {
                   await deps.sendMessage(data.chatJid, data.text);
                   logger.info(
@@ -89,6 +102,66 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (
+                data.type === 'document' &&
+                data.chatJid &&
+                data.filePath
+              ) {
+                // Authorization: same as sendMessage (Discord cross-channel allowed)
+                const targetGroup = registeredGroups[data.chatJid];
+                const isDiscordCrossChannel =
+                  sourceGroup.startsWith('dc_') &&
+                  data.chatJid.startsWith('dc:') &&
+                  targetGroup;
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup) ||
+                  isDiscordCrossChannel
+                ) {
+                  // Resolve relative path to host filesystem
+                  const groupDir = resolveGroupFolderPath(sourceGroup);
+                  const resolvedPath = path.resolve(groupDir, data.filePath);
+
+                  // Security: prevent path traversal outside group directory
+                  if (
+                    !resolvedPath.startsWith(groupDir + path.sep) &&
+                    resolvedPath !== groupDir
+                  ) {
+                    logger.warn(
+                      {
+                        filePath: data.filePath,
+                        resolvedPath,
+                        groupDir,
+                        sourceGroup,
+                      },
+                      'IPC document path traversal blocked',
+                    );
+                  } else if (!fs.existsSync(resolvedPath)) {
+                    logger.warn(
+                      { filePath: resolvedPath, sourceGroup },
+                      'IPC document file not found on host',
+                    );
+                  } else {
+                    await deps.sendDocument(
+                      data.chatJid,
+                      resolvedPath,
+                      data.caption,
+                    );
+                    logger.info(
+                      {
+                        chatJid: data.chatJid,
+                        filePath: resolvedPath,
+                        sourceGroup,
+                      },
+                      'IPC document sent',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC document attempt blocked',
                   );
                 }
               }

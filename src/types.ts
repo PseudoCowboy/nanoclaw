@@ -51,6 +51,8 @@ export interface NewMessage {
   timestamp: string;
   is_from_me?: boolean;
   is_bot_message?: boolean;
+  projectSlug?: string; // Project context for workspace/memory isolation
+  branchName?: string; // Git branch for agent isolation in workstream channels
 }
 
 export interface ScheduledTask {
@@ -83,6 +85,8 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
+  // Optional: send a file as a document attachment.
+  sendDocument?(jid: string, filePath: string, caption?: string): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
@@ -90,6 +94,9 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
+  // Optional: validate that a JID refers to a real channel/chat the bot can access.
+  // Returns true if valid, false if invalid (e.g. an application ID instead of a channel ID).
+  validateJid?(jid: string): Promise<boolean>;
 }
 
 // Callback type that channels use to deliver inbound messages
