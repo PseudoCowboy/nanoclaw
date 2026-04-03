@@ -565,6 +565,84 @@ Use available_groups.json to find the JID for a group. The folder name must be c
   },
 );
 
+interface GeminiSearchResult {
+  query: string;
+  summary: string;
+  sources: string[];
+  error?: string;
+}
+
+async function runGeminiSearch(query: string, detail: 'brief' | 'detailed'): Promise<GeminiSearchResult> {
+  const { execFileSync } = await import('child_process');
+  const prompt = detail === 'detailed'
+    ? `Search the web for: "${query}". Provide detailed results. Format your response as JSON: {"summary": "...", "sources": ["url1", "url2"]}`
+    : `Search the web for: "${query}". Give a brief factual summary. Format your response as JSON: {"summary": "...", "sources": ["url1", "url2"]}`;
+
+  try {
+    const raw = execFileSync('gemini', ['-p', prompt], {
+      timeout: 30000,
+      encoding: 'utf-8',
+      env: { ...process.env, HOME: '/home/node' },
+    });
+
+    const trimmed = raw.trim();
+    try {
+      const parsed = JSON.parse(trimmed);
+      return {
+        query,
+        summary: parsed.summary || trimmed,
+        sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+      };
+    } catch {
+      return { query, summary: trimmed, sources: [] };
+    }
+  } catch (err: any) {
+    return {
+      query,
+      summary: '',
+      sources: [],
+      error: err.message || String(err),
+    };
+  }
+}
+
+server.tool(
+  'gemini_search',
+  'Search the web using Google Gemini with built-in Google Search. Returns structured results with summary and sources. Preferred over built-in WebSearch for current information, docs, and fact-checking.',
+  {
+    query: z.string().describe('The search query'),
+    detail: z
+      .enum(['brief', 'detailed'])
+      .optional()
+      .default('brief')
+      .describe('How detailed the results should be'),
+  },
+  async (args) => {
+    const result = await runGeminiSearch(args.query, args.detail ?? 'brief');
+
+    if (result.error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Gemini search failed: ${result.error}\n\nFallback: Use the WebFetch tool to fetch a specific URL, or try a different query.`,
+        }],
+        isError: true,
+      };
+    }
+
+    const sourceList = result.sources.length > 0
+      ? `\n\nSources:\n${result.sources.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+      : '';
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `${result.summary}${sourceList}`,
+      }],
+    };
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

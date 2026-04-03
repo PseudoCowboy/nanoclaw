@@ -462,7 +462,6 @@ async function runQuery(
         'Edit',
         'Glob',
         'Grep',
-        'WebSearch',
         'WebFetch',
         'Task',
         'TaskOutput',
