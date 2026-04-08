@@ -1,3 +1,8 @@
+---
+status: completed
+date: 2026-04-03
+---
+
 # Verification Report - 2026-04-03
 
 ## Task 1 - Context Size for `opus-4.6-1m`

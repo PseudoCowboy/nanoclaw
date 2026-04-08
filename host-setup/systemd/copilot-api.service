@@ -1,0 +1,17 @@
+[Unit]
+Description=Copilot API Server (GitHub Copilot OpenAI-compatible proxy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/copilot-api start
+Restart=on-failure
+RestartSec=10
+Environment=HOME=/home/pseudo
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/pseudo/.local/bin
+StandardOutput=append:/home/pseudo/nanoclaw/logs/copilot-api.log
+StandardError=append:/home/pseudo/nanoclaw/logs/copilot-api.error.log
+
+[Install]
+WantedBy=default.target

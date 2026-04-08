@@ -1,0 +1,15 @@
+{
+  "allowedRoots": [
+    {
+      "path": "/home/pseudo",
+      "allowReadWrite": true,
+      "description": "Home directory"
+    }
+  ],
+  "blockedPatterns": [
+    ".ssh",
+    ".gnupg",
+    "credentials"
+  ],
+  "nonMainReadOnly": false
+}

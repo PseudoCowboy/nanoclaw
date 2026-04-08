@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-03-18
+superseded_by: 2026-03-25-workstream-execution-monitoring-design.md
+---
+
 # File-Based Collaborative Discussion System Design
 
 **Date:** 2026-03-18

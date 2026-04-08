@@ -1,0 +1,8 @@
+[Unit]
+Description=Re-apply copilot-api proxy patches if missing
+After=copilot-api.service copilot-api-responses.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pseudo/nanoclaw
+ExecStart=/home/pseudo/nanoclaw/scripts/reapply-copilot-patches.sh

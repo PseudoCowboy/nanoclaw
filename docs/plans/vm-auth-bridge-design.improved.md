@@ -1,3 +1,8 @@
+---
+status: completed
+date: 2026-03-15
+---
+
 # Auth Bridge Scraper Design
 
 **Goal:** Build a stable scraping system where a VM handles jobs and extraction, while a local machine stays logged in and provides authenticated, JavaScript-rendered pages on demand.

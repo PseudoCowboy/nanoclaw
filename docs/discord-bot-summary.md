@@ -52,7 +52,7 @@ DiscordChannel class (src/channels/discord.ts)
 
 ---
 
-## All `!` Commands (18 total)
+## All `!` Commands (19 total)
 
 ### Info & Help
 
@@ -101,6 +101,12 @@ DiscordChannel class (src/channels/discord.ts)
 |---------|-------------|
 | `!checkpoint from to` | Verify handoff completeness between two streams |
 | `!checkpoints` | List all checkpoints and their status |
+
+### Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `!doctor_workflow` | Live orchestration state diagnostic — in-memory vs SQLite consistency, orphaned sessions, watcher status |
 
 ---
 

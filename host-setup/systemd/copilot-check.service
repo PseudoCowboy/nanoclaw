@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Copilot API, Copilot Responses, and Gemini credentials — notify via Telegram
+After=copilot-api.service copilot-api-responses.service
+Wants=copilot-api.service copilot-api-responses.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pseudo/nanoclaw
+ExecStart=/home/pseudo/nanoclaw/scripts/check-copilot-credentials.sh --notify-ok
+Environment=HOME=/home/pseudo
+Environment=PATH=/usr/local/bin:/usr/bin:/bin

@@ -23,6 +23,7 @@ import {
   discussionSessions,
 } from './state.js';
 import { countTasks } from './helpers.js';
+import { assertValidTaskTransition } from './workflow-invariants.js';
 import type {
   TaskStatus,
   TaskStateEntry,
@@ -363,7 +364,10 @@ export async function rehydrateOrchestrationState(
           featureId: meta.featureId ?? null,
           round: meta.round ?? 0,
         });
-        logger.info({ channelId, topic: meta.topic }, 'Rehydrated planning session from SQLite');
+        logger.info(
+          { channelId, topic: meta.topic },
+          'Rehydrated planning session from SQLite',
+        );
       }
     } catch (err: any) {
       logger.warn(
@@ -692,8 +696,10 @@ export function startStreamWatcher(
                 // If the lead agent IS Argus (e.g., ws-qa), auto-approve
                 // since Argus is the reviewer — can't meaningfully review itself
                 if (leadAgent === 'Argus') {
+                  assertValidTaskTransition('implemented', 'approved');
                   currentTask.status = 'approved';
-                  currentTask.reviewRounds = (currentTask.reviewRounds || 0) + 1;
+                  currentTask.reviewRounds =
+                    (currentTask.reviewRounds || 0) + 1;
                   writeTaskState(projectSlug, streamType, taskState);
                   if (wsChannel) {
                     await wsChannel.send(
@@ -704,6 +710,7 @@ export function startStreamWatcher(
                   break;
                 }
 
+                assertValidTaskTransition('implemented', 'in_review');
                 currentTask.status = 'in_review';
                 writeTaskState(projectSlug, streamType, taskState);
 
@@ -748,6 +755,7 @@ export function startStreamWatcher(
                   'Failed to merge agent branch — aborted merge, setting merge_conflict',
                 );
                 // Set task to merge_conflict so we don't retry every poll
+                assertValidTaskTransition('approved', 'merge_conflict');
                 currentTask.status = 'merge_conflict' as TaskStatus;
                 writeTaskState(projectSlug, streamType, taskState);
                 const controlRoom = guild.channels.cache.find(
@@ -766,6 +774,7 @@ export function startStreamWatcher(
                 (t) => t.status === 'pending',
               );
               if (nextTask) {
+                assertValidTaskTransition('pending', 'in_progress');
                 nextTask.status = 'in_progress';
                 taskState.currentTask = nextTask.id;
 
@@ -814,6 +823,7 @@ export function startStreamWatcher(
 
             case 'changes_requested': {
               // Argus requested changes → re-trigger lead agent on same branch
+              assertValidTaskTransition('changes_requested', 'in_progress');
               currentTask.status = 'in_progress';
               // Reset so the next `implemented` transition will re-trigger Argus
               watcher.lastReviewedTaskId = undefined;
@@ -855,6 +865,7 @@ export function startStreamWatcher(
 
             case 'pending': {
               // Not started yet — create agent branch and trigger lead agent
+              assertValidTaskTransition('pending', 'in_progress');
               currentTask.status = 'in_progress';
               taskState.currentTask = currentTask.id;
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=NanoClaw Personal Assistant
+After=network.target copilot-api.service copilot-api-responses.service
+Wants=copilot-api.service copilot-api-responses.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /home/pseudo/nanoclaw/dist/index.js
+WorkingDirectory=/home/pseudo/nanoclaw
+Restart=always
+RestartSec=5
+Environment=HOME=/home/pseudo
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/pseudo/.local/bin
+StandardOutput=append:/home/pseudo/nanoclaw/logs/nanoclaw.log
+StandardError=append:/home/pseudo/nanoclaw/logs/nanoclaw.error.log
+
+[Install]
+WantedBy=default.target

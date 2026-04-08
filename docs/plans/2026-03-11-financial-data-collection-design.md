@@ -1,3 +1,8 @@
+---
+status: completed
+date: 2026-03-11
+---
+
 # Financial Data Collection System — Design Document
 
 **Date:** 2026-03-11

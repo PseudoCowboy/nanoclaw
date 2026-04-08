@@ -88,6 +88,14 @@ export {
   deleteDiscussionSession,
 } from './stream-watcher.js';
 
+// Re-export workflow invariants
+export {
+  assertNotSelfReview,
+  assertValidTaskTransition,
+  assertSessionNotOrphaned,
+  checkInvariant,
+} from './workflow-invariants.js';
+
 // Re-export planning
 export {
   parsePlanForStreams,
@@ -126,6 +134,7 @@ import {
 } from './workstreams.js';
 import { cmdCheckpoint, cmdCheckpoints } from './checkpoints.js';
 import { cmdCreateDiscussion, cmdCloseDiscussion } from './discussion.js';
+import { cmdDoctorWorkflow } from './doctor.js';
 import type { CommandHandler } from './types.js';
 
 // --- Command Registry ---
@@ -158,6 +167,9 @@ const commands: Record<string, CommandHandler> = {
   // Checkpoints
   checkpoint: cmdCheckpoint,
   checkpoints: cmdCheckpoints,
+
+  // Diagnostics
+  doctor_workflow: cmdDoctorWorkflow,
 
   // Discussion system
   create_discussion: cmdCreateDiscussion,

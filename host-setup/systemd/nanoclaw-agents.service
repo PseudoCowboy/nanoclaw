@@ -1,0 +1,19 @@
+[Unit]
+Description=NanoClaw Agent Bots (Athena, Hermes, Prometheus, Atlas, Apollo, Argus)
+After=network-online.target nanoclaw.service copilot-api.service copilot-api-responses.service
+Wants=network-online.target
+Requires=nanoclaw.service
+
+[Service]
+Type=forking
+WorkingDirectory=/home/pseudo/nanoclaw
+ExecStart=/home/pseudo/nanoclaw/agents/start-all.sh start
+ExecStop=/home/pseudo/nanoclaw/agents/start-all.sh stop
+ExecReload=/home/pseudo/nanoclaw/agents/start-all.sh restart
+EnvironmentFile=/home/pseudo/nanoclaw/agents/.env
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

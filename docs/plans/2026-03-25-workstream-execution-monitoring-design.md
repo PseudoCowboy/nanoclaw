@@ -1,3 +1,8 @@
+---
+status: active
+date: 2026-03-25
+---
+
 # Work Stream Execution Monitoring Design
 
 *Date: 2026-03-25*

@@ -384,7 +384,8 @@ async function buildContainerArgs(
   // Labels for lifecycle tracking and label-based cleanup
   args.push('--label', 'nanoclaw=true');
   // containerName format: nanoclaw-<group>-<timestamp>
-  const groupLabel = containerName.replace(/^nanoclaw-/, '').replace(/-\d+$/, '') || 'unknown';
+  const groupLabel =
+    containerName.replace(/^nanoclaw-/, '').replace(/-\d+$/, '') || 'unknown';
   args.push('--label', `nanoclaw.group=${groupLabel}`);
   args.push('--label', `nanoclaw.created=${new Date().toISOString()}`);
 

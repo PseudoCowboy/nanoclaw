@@ -2,7 +2,7 @@
 
 Generated: 2026-03-24 | Updated: 2026-04-03
 
-Comparison of the current Discord bot multi-agent development workflow (6 skills + 18 commands + 5 agents) against [Agent-First Development Principles](./AGENT-FIRST-PRINCIPLES.md).
+Comparison of the current Discord bot multi-agent development workflow (6 skills + 19 commands + 5 agents) against [Agent-First Development Principles](./AGENT-FIRST-PRINCIPLES.md).
 
 ---
 

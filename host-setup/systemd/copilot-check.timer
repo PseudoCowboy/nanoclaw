@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Copilot API credentials periodically
+
+[Timer]
+# Run 60 seconds after boot (gives copilot-api time to start)
+OnBootSec=60
+# Then check every 6 hours
+OnUnitActiveSec=6h
+
+[Install]
+WantedBy=timers.target

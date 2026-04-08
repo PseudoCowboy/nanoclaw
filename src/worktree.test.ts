@@ -2,13 +2,20 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { createWorktree, removeWorktree, isWorktreeActive } from './worktree.js';
+import {
+  createWorktree,
+  removeWorktree,
+  isWorktreeActive,
+} from './worktree.js';
 
 describe('worktree helpers', () => {
   let testRepo: string;
 
   beforeEach(() => {
-    testRepo = path.join('/tmp', `worktree-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testRepo = path.join(
+      '/tmp',
+      `worktree-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     fs.mkdirSync(testRepo, { recursive: true });
     execSync('git init && git commit --allow-empty -m "init"', {
       cwd: testRepo,

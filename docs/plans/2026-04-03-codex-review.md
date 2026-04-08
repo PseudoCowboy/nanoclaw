@@ -1,3 +1,8 @@
+---
+status: completed
+date: 2026-04-03
+---
+
 # Codex Review - 2026-04-03
 
 ## Task 2 - Built-in WebSearch Audit

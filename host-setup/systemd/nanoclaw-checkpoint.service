@@ -1,0 +1,9 @@
+[Unit]
+Description=NanoClaw daily checkpoint backup
+
+[Service]
+Type=oneshot
+ExecStart=/home/pseudo/nanoclaw/scripts/checkpoint.sh
+WorkingDirectory=/home/pseudo/nanoclaw
+StandardOutput=append:/home/pseudo/nanoclaw/logs/checkpoint.log
+StandardError=append:/home/pseudo/nanoclaw/logs/checkpoint.log

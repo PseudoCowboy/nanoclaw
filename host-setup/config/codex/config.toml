@@ -1,0 +1,41 @@
+# Codex CLI config — uses GitHub Copilot via copilot-api-responses proxy
+#
+# To switch models, either edit "model" below or use: codex -m <model>
+#
+# Available models through your Copilot account:
+#
+#   Codex-optimized (best for coding):
+#     gpt-5.3-codex, gpt-5.2-codex, gpt-5.1-codex, gpt-5.1-codex-max, gpt-5.1-codex-mini
+#
+#   General GPT:
+#     gpt-5.4, gpt-5.2, gpt-5.1, gpt-5-mini, gpt-4o, gpt-4.1, gpt-41-copilot
+#
+#   Claude:
+#     claude-opus-4.6, claude-sonnet-4.6, claude-sonnet-4.5, claude-sonnet-4
+#     claude-opus-4.5, claude-haiku-4.5
+#
+#   Gemini:
+#     gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-3-flash-preview, gemini-2.5-pro
+#
+#   Other:
+#     goldeneye
+#
+# Note: Non-OpenAI models (Claude, Gemini) may or may not work with Codex's
+# Responses API format — try them, but GPT/codex models are most reliable.
+
+model = "gpt-5.4"
+model_provider = "copilot"
+
+[model_providers.copilot]
+name = "GitHub Copilot"
+base_url = "http://localhost:4142/v1"
+env_key = "COPILOT_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+
+[projects."/home/pseudo"]
+trust_level = "trusted"
+
+[notice.model_migrations]
+"gpt-5.3-codex" = "gpt-5.4"

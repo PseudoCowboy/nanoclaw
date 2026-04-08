@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-03-17
+superseded_by: 2026-03-18-file-based-discussion-system.md
+---
+
 # Planning Discussion System Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

@@ -134,6 +134,7 @@ groups/shared_project/active/{project-slug}/
 | `!blocker "issue"` | Escalate to #control-room |
 | `!checkpoint from to` | Verify handoff completeness between streams |
 | `!checkpoints` | List all checkpoints and status |
+| `!doctor_workflow` | Live orchestration state diagnostic |
 
 ### Discussions (ad-hoc, independent of projects)
 | Command | Description |

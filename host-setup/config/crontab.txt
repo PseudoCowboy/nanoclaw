@@ -1,0 +1,2 @@
+# Gold price report — every hour at :00, sent to Telegram via NanoClaw IPC
+0 * * * * /home/pseudo/gold_price_cron.sh

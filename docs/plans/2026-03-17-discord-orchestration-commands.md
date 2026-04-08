@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-03-17
+superseded_by: 2026-03-25-workstream-execution-monitoring-plan.md
+---
+
 # Discord Orchestration Commands Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

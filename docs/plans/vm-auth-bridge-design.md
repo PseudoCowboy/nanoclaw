@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-03-14
+superseded_by: vm-auth-bridge-design.improved.md
+---
+
 uth Bridge Scraper Design
 
 **Goal:** Build a stable scraping system where a VM handles jobs and extraction, while a local machine stays logged in and provides authenticated, JavaScript-rendered pages on demand.

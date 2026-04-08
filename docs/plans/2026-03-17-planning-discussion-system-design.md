@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-03-17
+superseded_by: 2026-03-18-file-based-discussion-system-design.md
+---
+
 # Planning Discussion System Design
 
 **Date:** 2026-03-17

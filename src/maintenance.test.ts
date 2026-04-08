@@ -5,4 +5,9 @@ describe('maintenance', () => {
     const mod = await import('./maintenance.js');
     expect(typeof mod.runMaintenance).toBe('function');
   });
+
+  it('exports a scanWorkflowDrift function', async () => {
+    const mod = await import('./maintenance.js');
+    expect(typeof mod.scanWorkflowDrift).toBe('function');
+  });
 });

@@ -43,7 +43,8 @@ export async function cmdHelp(
       },
       {
         name: '\u{1F916} Info',
-        value: '`!help_orchestration` \u2014 Full workflow guide',
+        value:
+          '`!help_orchestration` \u2014 Full workflow guide\n`!doctor_workflow` \u2014 Live orchestration state diagnostic',
       },
     )
     .setFooter({ text: 'Iris \u2014 NanoClaw Discord Bot' })

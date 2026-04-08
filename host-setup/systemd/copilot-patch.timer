@@ -1,0 +1,10 @@
+[Unit]
+Description=Check and re-apply copilot proxy patches periodically
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Copilot API Responses Server (Responses API fork for Codex)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/copilot-api-responses start --port 4142
+Restart=on-failure
+RestartSec=10
+Environment=HOME=/home/pseudo
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/pseudo/.local/bin
+StandardOutput=append:/home/pseudo/nanoclaw/logs/copilot-api-responses.log
+StandardError=append:/home/pseudo/nanoclaw/logs/copilot-api-responses.error.log
+
+[Install]
+WantedBy=default.target
